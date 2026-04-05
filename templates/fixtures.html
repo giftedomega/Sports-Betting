@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Fixtures - Premier League Betting Analysis{% endblock %}
+
+{% block content %}
+<div class="fixtures-page">
+    <header class="page-header">
+        <h1>Upcoming Fixtures</h1>
+        <div class="filters">
+            <button class="btn btn-secondary active" hx-get="/api/fixtures?days=7" hx-target="#fixtures-container">Next 7 Days</button>
+            <button class="btn btn-secondary" hx-get="/api/fixtures?days=14" hx-target="#fixtures-container">Next 14 Days</button>
+            <button class="btn btn-secondary" hx-get="/api/fixtures?days=30" hx-target="#fixtures-container">Next 30 Days</button>
+        </div>
+    </header>
+
+    <div id="fixtures-container" hx-get="/api/fixtures?days=7" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading">Loading fixtures...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'fixtures-container') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            if (data.fixtures) {
+                event.detail.target.innerHTML = formatFixturesPage(data.fixtures);
+            }
+        } catch (e) { }
+    }
+});
+
+function formatFixturesPage(fixtures) {
+    if (!fixtures || fixtures.length === 0) {
+        return '<p class="empty">No upcoming fixtures found</p>';
+    }
+
+    // Group by date
+    const grouped = {};
+    fixtures.forEach(f => {
+        const date = f.match_date ? new Date(f.match_date).toDateString() : 'TBD';
+        if (!grouped[date]) grouped[date] = [];
+        grouped[date].push(f);
+    });
+
+    return Object.entries(grouped).map(([date, matches]) => `
+        <div class="fixture-group">
+            <h3 class="date-header">${date}</h3>
+            <div class="fixtures-grid">
+                ${matches.map(f => `
+                    <div class="fixture-card-large" hx-get="/match/${f.id || 0}" hx-target="#main-content" hx-push-url="true">
+                        <div class="fixture-teams">
+                            <div class="team home">
+                                <span class="team-name">${f.home_team}</span>
+                            </div>
+                            <div class="vs-container">
+                                <span class="vs">VS</span>
+                                <span class="time">${f.match_date ? new Date(f.match_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'TBD'}</span>
+                            </div>
+                            <div class="team away">
+                                <span class="team-name">${f.away_team}</span>
+                            </div>
+                        </div>
+                        <div class="fixture-info">
+                            <span class="venue">${f.venue || ''}</span>
+                            <span class="gameweek">Gameweek ${f.gameweek || '-'}</span>
+                        </div>
+                        <button class="btn btn-primary btn-small" hx-post="/api/predictions/match?home_team=${encodeURIComponent(f.home_team)}&away_team=${encodeURIComponent(f.away_team)}" hx-target="#prediction-modal" hx-swap="innerHTML">
+                            Get Prediction
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Match Analysis - Premier League Betting Analysis{% endblock %}
+
+{% block content %}
+<div class="match-page">
+    <header class="page-header">
+        <a href="/fixtures" class="back-link">&larr; Back to Fixtures</a>
+        <h1>Match Analysis</h1>
+    </header>
+
+    <div class="match-container" id="match-container" hx-get="/api/fixtures/{{ fixture_id }}/context" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading">Loading match data...</div>
+    </div>
+
+    <!-- Pitch Formation Display -->
+    <section class="card">
+        <h2>Expected Formations</h2>
+        <div id="pitch-container" class="pitch-container">
+            <div class="loading">Loading formations...</div>
+        </div>
+    </section>
+
+    <!-- AI Analysis -->
+    <section class="card">
+        <h2>AI Analysis</h2>
+        <div id="analysis-container">
+            <button class="btn btn-primary" hx-post="/api/predictions/match?fixture_id={{ fixture_id }}" hx-target="#analysis-result" hx-swap="innerHTML">
+                Generate AI Prediction
+            </button>
+            <div id="analysis-result"></div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'analysis-result') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            event.detail.target.innerHTML = formatAnalysisResult(data);
+        } catch (e) { }
+    }
+});
+
+function formatAnalysisResult(data) {
+    if (data.error) {
+        return `<div class="error">${data.error}</div>`;
+    }
+
+    return `
+        <div class="analysis-result">
+            <div class="prediction-main">
+                <div class="outcome-display ${data.predicted_outcome}">
+                    <span class="label">Predicted Outcome</span>
+                    <span class="value">${formatOutcome(data.predicted_outcome)}</span>
+                    <span class="confidence">${data.confidence}% confidence</span>
+                </div>
+
+                ${data.predicted_score ? `
+                    <div class="score-prediction">
+                        <span>${data.predicted_score.home || 0}</span>
+                        <span>-</span>
+                        <span>${data.predicted_score.away || 0}</span>
+                    </div>
+                ` : ''}
+            </div>
+
+            <div class="analysis-sections">
+                <div class="section">
+                    <h4>Key Factors</h4>
+                    <ul>
+                        ${(data.key_factors || []).map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                </div>
+
+                ${data.recommended_bets && data.recommended_bets.length > 0 ? `
+                    <div class="section">
+                        <h4>Recommended Bets</h4>
+                        <div class="bets-list">
+                            ${data.recommended_bets.map(b => `
+                                <div class="bet-recommendation">
+                                    <div class="bet-header">
+                                        <span class="market">${b.market}</span>
+                                        <span class="selection">${b.selection}</span>
+                                    </div>
+                                    <div class="bet-meta">
+                                        <span class="confidence">${b.confidence}% confidence</span>
+                                        <span class="value-indicator ${b.odds_value}">${b.odds_value} value</span>
+                                    </div>
+                                    <p class="reasoning">${b.reasoning}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${data.value_bets && data.value_bets.length > 0 ? `
+                    <div class="section">
+                        <h4>Value Bets</h4>
+                        <div class="value-bets-list">
+                            ${data.value_bets.map(b => `
+                                <div class="value-bet">
+                                    <span class="market">${b.market}: ${b.selection}</span>
+                                    <span class="min-odds">Min odds: ${b.min_odds}</span>
+                                    <p>${b.reasoning}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <div class="section">
+                    <h4>Risk Assessment</h4>
+                    <div class="risk-display ${data.risk_level}">
+                        <span class="risk-level">${(data.risk_level || 'medium').toUpperCase()}</span>
+                    </div>
+                    <ul class="risk-factors">
+                        ${(data.risk_factors || []).map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="summary-section">
+                <h4>Summary</h4>
+                <p>${data.summary || 'No summary available'}</p>
+            </div>
+        </div>
+    `;
+}
+
+function formatOutcome(outcome) {
+    const map = {
+        'home_win': 'Home Win',
+        'away_win': 'Away Win',
+        'draw': 'Draw'
+    };
+    return map[outcome] || outcome || 'Unknown';
+}
+</script>
+{% endblock %}

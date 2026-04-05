@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Predictions - Premier League Betting Analysis{% endblock %}
+
+{% block content %}
+<div class="predictions-page">
+    <header class="page-header">
+        <h1>AI Predictions</h1>
+        <button class="btn btn-primary" hx-post="/api/predictions/analyze" hx-target="#predictions-container" hx-indicator="#analyze-loading">
+            <span id="analyze-loading" class="htmx-indicator">Analyzing...</span>
+            <span>Analyze All Upcoming Matches</span>
+        </button>
+    </header>
+
+    <div class="predictions-stats" hx-get="/api/predictions/performance" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading">Loading stats...</div>
+    </div>
+
+    <div id="predictions-container" hx-get="/api/predictions" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading">Loading predictions...</div>
+    </div>
+</div>
+
+<!-- Prediction Detail Modal -->
+<div id="prediction-modal" class="modal" style="display: none;">
+    <!-- Populated dynamically -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'predictions-container') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            if (data.predictions) {
+                event.detail.target.innerHTML = formatPredictionsPage(data.predictions);
+            }
+        } catch (e) { }
+    }
+
+    if (event.detail.target.id === 'prediction-modal') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            event.detail.target.innerHTML = formatPredictionDetail(data);
+            event.detail.target.style.display = 'block';
+        } catch (e) { }
+    }
+
+    if (event.detail.target.className.includes('predictions-stats')) {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            event.detail.target.innerHTML = formatPredictionStats(data);
+        } catch (e) { }
+    }
+});
+
+function formatPredictionsPage(predictions) {
+    if (!predictions || predictions.length === 0) {
+        return `
+            <div class="empty-state">
+                <h3>No Predictions Yet</h3>
+                <p>Click "Analyze All Upcoming Matches" to generate AI predictions for upcoming fixtures.</p>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="predictions-grid">
+            ${predictions.map(p => `
+                <div class="prediction-card-large ${p.risk_level || 'medium'}">
+                    <div class="prediction-header">
+                        <span class="match">${p.home_team || 'Home'} vs ${p.away_team || 'Away'}</span>
+                        <span class="confidence-badge">${p.confidence || 0}%</span>
+                    </div>
+
+                    <div class="prediction-outcome">
+                        <span class="label">Predicted Outcome:</span>
+                        <span class="value ${p.predicted_outcome}">${formatOutcome(p.predicted_outcome)}</span>
+                    </div>
+
+                    ${p.predicted_score ? `
+                        <div class="predicted-score">
+                            <span>${p.predicted_score.home || 0}</span>
+                            <span>-</span>
+                            <span>${p.predicted_score.away || 0}</span>
+                        </div>
+                    ` : ''}
+
+                    <div class="key-factors">
+                        <h4>Key Factors</h4>
+                        <ul>
+                            ${(p.key_factors || []).map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                    </div>
+
+                    ${p.recommended_bets && p.recommended_bets.length > 0 ? `
+                        <div class="recommended-bets">
+                            <h4>Recommended Bets</h4>
+                            ${p.recommended_bets.map(b => `
+                                <div class="bet-item">
+                                    <span class="market">${b.market}</span>
+                                    <span class="selection">${b.selection}</span>
+                                    <span class="bet-confidence">${b.confidence}%</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    <div class="risk-indicator ${p.risk_level || 'medium'}">
+                        Risk: ${(p.risk_level || 'medium').toUpperCase()}
+                    </div>
+
+                    <div class="summary">${p.summary || ''}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function formatOutcome(outcome) {
+    const map = {
+        'home_win': 'Home Win',
+        'away_win': 'Away Win',
+        'draw': 'Draw'
+    };
+    return map[outcome] || outcome || 'Unknown';
+}
+
+function formatPredictionStats(data) {
+    return `
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-value">${data.total_predictions || 0}</span>
+                <span class="stat-label">Total Predictions</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">${data.correct_predictions || 0}</span>
+                <span class="stat-label">Correct</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">${(data.accuracy || 0).toFixed(1)}%</span>
+                <span class="stat-label">Accuracy</span>
+            </div>
+            <div class="stat-card ${data.total_profit_loss >= 0 ? 'positive' : 'negative'}">
+                <span class="stat-value">${data.total_profit_loss >= 0 ? '+' : ''}${(data.total_profit_loss || 0).toFixed(2)}</span>
+                <span class="stat-label">Profit/Loss</span>
+            </div>
+        </div>
+    `;
+}
+
+function formatPredictionDetail(data) {
+    return `
+        <div class="modal-content">
+            <button class="modal-close" onclick="this.parentElement.parentElement.style.display='none'">&times;</button>
+            <h2>${data.home_team} vs ${data.away_team}</h2>
+            <div class="prediction-detail">
+                <p><strong>Outcome:</strong> ${formatOutcome(data.predicted_outcome)}</p>
+                <p><strong>Confidence:</strong> ${data.confidence}%</p>
+                <p><strong>Summary:</strong> ${data.summary || 'No summary available'}</p>
+            </div>
+        </div>
+    `;
+}
+</script>
+{% endblock %}

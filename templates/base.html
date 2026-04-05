@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Premier League Betting Analysis{% endblock %}</title>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    {% block head %}{% endblock %}
+</head>
+<body hx-ext="ws" ws-connect="/ws">
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/">PL Betting AI</a>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" hx-get="/" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Dashboard</a></li>
+            <li><a href="/fixtures" hx-get="/fixtures" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Fixtures</a></li>
+            <li><a href="/predictions" hx-get="/predictions" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Predictions</a></li>
+            <li><a href="/teams" hx-get="/teams" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Teams</a></li>
+        </ul>
+        <div class="nav-status">
+            <span id="connection-status" class="status-dot"></span>
+            <span id="last-update">Connecting...</span>
+        </div>
+    </nav>
+
+    <main id="main-content" class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>Premier League Betting Analysis | Powered by Ollama AI</p>
+        <p>Last update: <span id="global-last-update">-</span></p>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

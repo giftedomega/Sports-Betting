@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Database
+data/database.db
+data/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / Secrets
+.env
+*.env
+
+# Soccerdata cache
+.soccerdata/
+
+# Byte-compiled
+*.pyc
+
+# NUL file (Windows artifact)
+nul

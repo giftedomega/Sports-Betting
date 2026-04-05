@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Teams - Premier League Betting Analysis{% endblock %}
+
+{% block content %}
+<div class="teams-page">
+    <header class="page-header">
+        <h1>Premier League Teams</h1>
+    </header>
+
+    <div class="league-table-full" hx-get="/api/teams/table" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading">Loading league table...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.className.includes('league-table-full')) {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            if (data.table) {
+                event.detail.target.innerHTML = formatFullTable(data.table);
+            }
+        } catch (e) { }
+    }
+
+    if (event.detail.target.id === 'team-detail') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            event.detail.target.innerHTML = formatTeamDetail(data);
+        } catch (e) { }
+    }
+});
+
+function formatFullTable(table) {
+    return `
+        <table class="league-table full">
+            <thead>
+                <tr>
+                    <th>Pos</th>
+                    <th>Team</th>
+                    <th>P</th>
+                    <th>W</th>
+                    <th>D</th>
+                    <th>L</th>
+                    <th>GF</th>
+                    <th>GA</th>
+                    <th>GD</th>
+                    <th>Pts</th>
+                    <th>Form</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${table.map((t, i) => `
+                    <tr class="${getPositionClass(i + 1)}">
+                        <td>${t.position || i + 1}</td>
+                        <td class="team-name">${t.name}</td>
+                        <td>${t.played || 0}</td>
+                        <td>${t.won || 0}</td>
+                        <td>${t.drawn || 0}</td>
+                        <td>${t.lost || 0}</td>
+                        <td>${t.goals_for || 0}</td>
+                        <td>${t.goals_against || 0}</td>
+                        <td class="${getGDClass(t)}">${getGD(t)}</td>
+                        <td><strong>${t.points || 0}</strong></td>
+                        <td class="form">${formatForm(t.form)}</td>
+                        <td>
+                            <button class="btn btn-small" hx-get="/api/teams/${encodeURIComponent(t.name)}" hx-target="#team-detail" hx-swap="innerHTML">
+                                Details
+                            </button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+
+        <div id="team-detail" class="team-detail-panel"></div>
+    `;
+}
+
+function getPositionClass(pos) {
+    if (pos <= 4) return 'champions-league';
+    if (pos === 5) return 'europa-league';
+    if (pos >= 18) return 'relegation';
+    return '';
+}
+
+function getGD(t) {
+    const gd = (t.goals_for || 0) - (t.goals_against || 0);
+    return gd > 0 ? '+' + gd : gd;
+}
+
+function getGDClass(t) {
+    const gd = (t.goals_for || 0) - (t.goals_against || 0);
+    if (gd > 0) return 'positive';
+    if (gd < 0) return 'negative';
+    return '';
+}
+
+function formatForm(form) {
+    if (!form) return '-';
+    return form.split('').map(r => {
+        const cls = r === 'W' ? 'win' : r === 'D' ? 'draw' : 'loss';
+        return `<span class="form-result ${cls}">${r}</span>`;
+    }).join('');
+}
+
+function formatTeamDetail(team) {
+    return `
+        <div class="team-detail-content">
+            <h3>${team.name}</h3>
+            <div class="team-stats">
+                <p><strong>Position:</strong> ${team.position || '-'}</p>
+                <p><strong>Points:</strong> ${team.points || 0}</p>
+                <p><strong>Goals Scored:</strong> ${team.goals_for || 0}</p>
+                <p><strong>Goals Conceded:</strong> ${team.goals_against || 0}</p>
+            </div>
+            <button class="btn btn-secondary" hx-get="/api/teams/${encodeURIComponent(team.name)}/players" hx-target="#team-players" hx-swap="innerHTML">
+                View Squad
+            </button>
+            <button class="btn btn-secondary" hx-get="/api/teams/${encodeURIComponent(team.name)}/news" hx-target="#team-news" hx-swap="innerHTML">
+                View News
+            </button>
+            <div id="team-players"></div>
+            <div id="team-news"></div>
+        </div>
+    `;
+}
+</script>
+{% endblock %}

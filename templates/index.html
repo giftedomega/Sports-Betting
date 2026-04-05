@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Premier League Betting Analysis{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <header class="page-header">
+        <h1>Premier League Betting Analysis</h1>
+        <p>AI-powered match predictions and betting insights</p>
+    </header>
+
+    <div class="dashboard-grid">
+        <!-- Upcoming Fixtures -->
+        <section class="card">
+            <h2>Upcoming Fixtures</h2>
+            <div id="fixtures-list" hx-get="/api/fixtures?days=14&all_fixtures=true" hx-trigger="load, every 60s, refreshFixtures from:body" hx-swap="innerHTML">
+                <div class="loading">Loading fixtures...</div>
+            </div>
+            <a href="/fixtures" class="btn btn-secondary">View All Fixtures</a>
+        </section>
+
+        <!-- Latest Predictions -->
+        <section class="card">
+            <h2>Latest Predictions</h2>
+            <div id="predictions-list" hx-get="/api/predictions" hx-trigger="load, every 120s, refreshPredictions from:body" hx-swap="innerHTML">
+                <div class="loading">Loading predictions...</div>
+            </div>
+            <button class="btn btn-primary" hx-post="/api/predictions/analyze" hx-swap="innerHTML" hx-target="#predictions-list">
+                Analyze Upcoming Matches
+            </button>
+        </section>
+
+        <!-- League Table -->
+        <section class="card card-wide">
+            <h2>League Table</h2>
+            <div id="league-table" hx-get="/api/teams/table" hx-trigger="load, every 120s, refreshTable from:body" hx-swap="innerHTML">
+                <div class="loading">Loading table...</div>
+            </div>
+        </section>
+
+        <!-- Recent News -->
+        <section class="card">
+            <h2>Latest News</h2>
+            <div id="news-feed" hx-get="/api/news?limit=5" hx-trigger="load, every 60s, refreshNews from:body" hx-swap="innerHTML">
+                <div class="loading">Loading news...</div>
+            </div>
+        </section>
+
+        <!-- System Status -->
+        <section class="card">
+            <h2>System Status</h2>
+            <div id="system-status" hx-get="/api/status" hx-trigger="load, every 60s" hx-swap="innerHTML">
+                <div class="loading">Checking status...</div>
+            </div>
+            <button class="btn btn-secondary" hx-post="/api/refresh" hx-swap="innerHTML" hx-target="#system-status">
+                Refresh Data
+            </button>
+        </section>
+    </div>
+</div>
+
+<template id="fixtures-template">
+    <div class="fixtures-list">
+        <!-- Populated by JS -->
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// WebSocket connection for real-time updates
+let ws = null;
+let wsReconnectAttempts = 0;
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+    ws.onopen = function() {
+        console.log('[WS] Connected');
+        wsReconnectAttempts = 0;
+    };
+
+    ws.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('[WS] Message:', data);
+
+            // Trigger HTMX refresh based on update type
+            if (data.type === 'background_update') {
+                switch(data.task) {
+                    case 'fixtures':
+                        document.body.dispatchEvent(new Event('refreshFixtures'));
+                        break;
+                    case 'team_stats':
+                        document.body.dispatchEvent(new Event('refreshTable'));
+                        break;
+                    case 'news':
+                        document.body.dispatchEvent(new Event('refreshNews'));
+                        break;
+                    case 'predictions':
+                        document.body.dispatchEvent(new Event('refreshPredictions'));
+                        break;
+                }
+            }
+        } catch (e) {
+            console.error('[WS] Parse error:', e);
+        }
+    };
+
+    ws.onclose = function() {
+        console.log('[WS] Disconnected');
+        // Reconnect with exponential backoff
+        if (wsReconnectAttempts < 5) {
+            wsReconnectAttempts++;
+            setTimeout(connectWebSocket, Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000));
+        }
+    };
+
+    ws.onerror = function(error) {
+        console.error('[WS] Error:', error);
+    };
+}
+
+// Connect WebSocket on page load
+connectWebSocket();
+
+// Handle HTMX responses
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    const target = event.detail.target;
+    console.log('[HTMX] afterSwap for:', target.id);
+
+    // Format fixtures response
+    if (target.id === 'fixtures-list') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            console.log('[FIXTURES] Response:', data);
+            if (data.fixtures) {
+                target.innerHTML = formatFixtures(data.fixtures.slice(0, 5));
+            } else if (data.count === 0) {
+                target.innerHTML = '<p class="empty">No fixtures available</p>';
+            }
+        } catch (e) {
+            console.error('[FIXTURES] Parse error:', e);
+        }
+    }
+
+    // Format league table response
+    if (target.id === 'league-table') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            console.log('[TABLE] Response:', data);
+            if (data.table) {
+                target.innerHTML = formatLeagueTable(data.table);
+            }
+        } catch (e) {
+            console.error('[TABLE] Parse error:', e);
+        }
+    }
+
+    // Format news response
+    if (target.id === 'news-feed') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            console.log('[NEWS] Response:', data);
+            if (data.articles) {
+                target.innerHTML = formatNews(data.articles);
+            }
+        } catch (e) {
+            console.error('[NEWS] Parse error:', e);
+        }
+    }
+
+    // Format status response
+    if (target.id === 'system-status') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            console.log('[STATUS] Response:', data);
+            target.innerHTML = formatStatus(data);
+        } catch (e) {
+            console.error('[STATUS] Parse error:', e);
+        }
+    }
+
+    // Format predictions response
+    if (target.id === 'predictions-list') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            console.log('[PREDICTIONS] Response:', data);
+            if (data.predictions) {
+                target.innerHTML = formatPredictions(data.predictions);
+            }
+        } catch (e) {
+            console.error('[PREDICTIONS] Parse error:', e);
+        }
+    }
+});
+
+// Log HTMX errors
+document.body.addEventListener('htmx:responseError', function(event) {
+    console.error('[HTMX] Response error:', event.detail);
+});
+
+function formatFixtures(fixtures) {
+    if (!fixtures || fixtures.length === 0) {
+        return '<p class="empty">No upcoming fixtures</p>';
+    }
+    return fixtures.map(f => `
+        <div class="fixture-card">
+            <div class="fixture-teams">
+                <span class="team home">${f.home_team}</span>
+                <span class="vs">vs</span>
+                <span class="team away">${f.away_team}</span>
+            </div>
+            <div class="fixture-meta">
+                ${f.match_date ? new Date(f.match_date).toLocaleDateString() : 'TBD'}
+                ${f.round ? ' | GW' + f.round : (f.gameweek ? ' | GW' + f.gameweek : '')}
+                ${f.status && f.status !== 'scheduled' ? ' (' + f.status + ')' : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function formatLeagueTable(table) {
+    if (!table || table.length === 0) {
+        return '<p class="empty">No data available</p>';
+    }
+    return `
+        <table class="league-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th>P</th>
+                    <th>W</th>
+                    <th>D</th>
+                    <th>L</th>
+                    <th>GD</th>
+                    <th>Pts</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${table.slice(0, 10).map(t => `
+                    <tr>
+                        <td>${t.position || '-'}</td>
+                        <td>${t.name}</td>
+                        <td>${t.played || 0}</td>
+                        <td>${t.won || 0}</td>
+                        <td>${t.drawn || 0}</td>
+                        <td>${t.lost || 0}</td>
+                        <td>${(t.goals_for || 0) - (t.goals_against || 0)}</td>
+                        <td><strong>${t.points || 0}</strong></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function formatNews(articles) {
+    if (!articles || articles.length === 0) {
+        return '<p class="empty">No news available</p>';
+    }
+    return articles.map(a => `
+        <div class="news-item ${a.impact || ''}">
+            <a href="${a.url}" target="_blank">${a.title}</a>
+            <div class="news-meta">
+                <span class="source">${a.source}</span>
+                <span class="sentiment ${a.sentiment}">${a.sentiment || ''}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function formatStatus(data) {
+    const statusClass = data.status === 'operational' ? 'success' : 'warning';
+    return `
+        <div class="status-info">
+            <div class="status-item">
+                <span class="label">Status:</span>
+                <span class="value ${statusClass}">${data.status}</span>
+            </div>
+            <div class="status-item">
+                <span class="label">Ollama:</span>
+                <span class="value ${data.ollama?.status === 'connected' ? 'success' : 'error'}">
+                    ${data.ollama?.status || 'unknown'}
+                </span>
+            </div>
+            <div class="status-item">
+                <span class="label">Model:</span>
+                <span class="value">${data.config?.model || 'N/A'}</span>
+            </div>
+        </div>
+    `;
+}
+
+function formatPredictions(predictions) {
+    if (!predictions || predictions.length === 0) {
+        return '<p class="empty">No predictions yet. Click "Analyze" to generate.</p>';
+    }
+    return predictions.map(p => `
+        <div class="prediction-card ${p.risk_level || ''}">
+            <div class="match">${p.home_team} vs ${p.away_team}</div>
+            <div class="prediction">
+                <span class="outcome">${p.predicted_outcome || 'TBD'}</span>
+                <span class="confidence">${p.confidence || 0}% confidence</span>
+            </div>
+            <div class="summary">${p.summary || ''}</div>
+        </div>
+    `).join('');
+}
+</script>
+{% endblock %}
