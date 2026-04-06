@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% block title %}Bet Tracker - Premier League Betting Analysis{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/components.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="tracker-page">
+    <header class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <h1>Bet Tracker</h1>
+            <p>Track, analyse, and review your betting performance</p>
+        </div>
+        <button class="btn btn-primary" onclick="openModal()">+ Add Bet</button>
+    </header>
+
+    <!-- Stats Row -->
+    <div class="stats-grid" id="tracker-stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+        <div class="stat-card" id="stat-total">
+            <span class="stat-value" id="stat-total-value">-</span>
+            <span class="stat-label">Total Bets</span>
+        </div>
+        <div class="stat-card" id="stat-won">
+            <span class="stat-value" id="stat-won-value" style="color: var(--success);">-</span>
+            <span class="stat-label">Won</span>
+        </div>
+        <div class="stat-card" id="stat-lost">
+            <span class="stat-value" id="stat-lost-value" style="color: var(--danger);">-</span>
+            <span class="stat-label">Lost</span>
+        </div>
+        <div class="stat-card" id="stat-winrate">
+            <span class="stat-value" id="stat-winrate-value">-</span>
+            <span class="stat-label">Win Rate %</span>
+        </div>
+        <div class="stat-card" id="stat-pnl">
+            <span class="stat-value" id="stat-pnl-value">-</span>
+            <span class="stat-label">Total P&amp;L</span>
+        </div>
+    </div>
+
+    <!-- Hidden container for HTMX summary load -->
+    <div id="tracker-summary-loader"
+         hx-get="/api/tracker/summary"
+         hx-trigger="load, refreshSummary from:body"
+         hx-swap="innerHTML"
+         style="display: none;"></div>
+
+    <!-- Charts Row -->
+    <div class="grid-2" style="margin-bottom: var(--space-lg);">
+        <div class="card">
+            <h2>Cumulative P&amp;L</h2>
+            <canvas id="chart-pnl" height="260"></canvas>
+        </div>
+        <div class="card">
+            <h2>ROI by Market</h2>
+            <canvas id="chart-roi" height="260"></canvas>
+        </div>
+    </div>
+
+    <!-- Bets Table -->
+    <div class="card card-wide">
+        <h2>Bet History</h2>
+        <div style="overflow-x: auto;">
+            <table class="data-table" id="bets-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Match</th>
+                        <th>Market</th>
+                        <th>Selection</th>
+                        <th class="text-right">Odds</th>
+                        <th class="text-right">Stake</th>
+                        <th class="text-center">Result</th>
+                        <th class="text-right">P&amp;L</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="bets-table-body">
+                    <tr><td colspan="9" style="text-align:center; padding: var(--space-xl);">Loading bets...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Hidden container for HTMX bets load -->
+    <div id="tracker-bets-loader"
+         hx-get="/api/tracker/bets"
+         hx-trigger="load, refreshBets from:body"
+         hx-swap="innerHTML"
+         style="display: none;"></div>
+</div>
+
+<!-- Add Bet Modal -->
+<div class="modal-overlay" id="add-bet-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Add New Bet</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-bet-form">
+                <div style="margin-bottom: var(--space-md);">
+                    <label for="bet-match">Match Description</label>
+                    <input type="text" id="bet-match" name="match" placeholder="e.g. Arsenal vs Chelsea" required>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-bottom: var(--space-md);">
+                    <div>
+                        <label for="bet-market">Market</label>
+                        <select id="bet-market" name="market" required>
+                            <option value="">Select market...</option>
+                            <option value="1X2">1X2</option>
+                            <option value="Over/Under">Over/Under</option>
+                            <option value="BTTS">BTTS</option>
+                            <option value="Correct Score">Correct Score</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="bet-selection">Selection</label>
+                        <input type="text" id="bet-selection" name="selection" placeholder="e.g. Home Win" required>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); margin-bottom: var(--space-md);">
+                    <div>
+                        <label for="bet-odds">Odds</label>
+                        <input type="number" id="bet-odds" name="odds" step="0.01" min="1.01" placeholder="e.g. 2.50" required>
+                    </div>
+                    <div>
+                        <label for="bet-stake">Stake</label>
+                        <input type="number" id="bet-stake" name="stake" step="0.01" min="0.01" placeholder="e.g. 10.00" required>
+                    </div>
+                </div>
+                <div style="margin-bottom: var(--space-md);">
+                    <label for="bet-notes">Notes (optional)</label>
+                    <textarea id="bet-notes" name="notes" placeholder="Any additional notes..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitBet()">Add Bet</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Result Modal -->
+<div class="modal-overlay" id="edit-result-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Update Result</h2>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-bet-id">
+            <div style="margin-bottom: var(--space-md);">
+                <label for="edit-result">Result</label>
+                <select id="edit-result" name="result">
+                    <option value="pending">Pending</option>
+                    <option value="won">Won</option>
+                    <option value="lost">Lost</option>
+                    <option value="void">Void</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitEdit()">Update</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --------------------------------------------------------------------------
+// Chart instances
+// --------------------------------------------------------------------------
+let pnlChart = null;
+let roiChart = null;
+let allBets = [];
+
+// --------------------------------------------------------------------------
+// Result styling
+// --------------------------------------------------------------------------
+const RESULT_STYLES = {
+    won:     { bg: 'rgba(0, 255, 133, 0.15)',  color: 'var(--success)', label: 'Won' },
+    lost:    { bg: 'rgba(233, 0, 82, 0.15)',    color: 'var(--danger)',  label: 'Lost' },
+    void:    { bg: 'rgba(255, 193, 7, 0.15)',   color: 'var(--warning)', label: 'Void' },
+    pending: { bg: 'rgba(136, 146, 176, 0.15)', color: 'var(--text-secondary)', label: 'Pending' }
+};
+
+// --------------------------------------------------------------------------
+// Modal open / close
+// --------------------------------------------------------------------------
+function openModal() {
+    document.getElementById('add-bet-modal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('add-bet-modal').classList.remove('active');
+    document.getElementById('add-bet-form').reset();
+}
+
+function openEditModal(betId, currentResult) {
+    document.getElementById('edit-bet-id').value = betId;
+    document.getElementById('edit-result').value = currentResult || 'pending';
+    document.getElementById('edit-result-modal').classList.add('active');
+}
+
+function closeEditModal() {
+    document.getElementById('edit-result-modal').classList.remove('active');
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.remove('active');
+        }
+    });
+});
+
+// --------------------------------------------------------------------------
+// Submit new bet
+// --------------------------------------------------------------------------
+async function submitBet() {
+    const form = document.getElementById('add-bet-form');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    const payload = {
+        match:     document.getElementById('bet-match').value,
+        market:    document.getElementById('bet-market').value,
+        selection: document.getElementById('bet-selection').value,
+        odds:      parseFloat(document.getElementById('bet-odds').value),
+        stake:     parseFloat(document.getElementById('bet-stake').value),
+        notes:     document.getElementById('bet-notes').value
+    };
+
+    try {
+        const res = await fetch('/api/tracker/bets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            closeModal();
+            document.body.dispatchEvent(new Event('refreshBets'));
+            document.body.dispatchEvent(new Event('refreshSummary'));
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert('Failed to add bet: ' + (err.detail || res.statusText));
+        }
+    } catch (e) {
+        console.error('[TRACKER] Submit error:', e);
+        alert('Network error. Please try again.');
+    }
+}
+
+// --------------------------------------------------------------------------
+// Edit result
+// --------------------------------------------------------------------------
+async function submitEdit() {
+    const betId = document.getElementById('edit-bet-id').value;
+    const result = document.getElementById('edit-result').value;
+
+    try {
+        const res = await fetch(`/api/tracker/bets/${betId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ result: result })
+        });
+
+        if (res.ok) {
+            closeEditModal();
+            document.body.dispatchEvent(new Event('refreshBets'));
+            document.body.dispatchEvent(new Event('refreshSummary'));
+        } else {
+            alert('Failed to update result.');
+        }
+    } catch (e) {
+        console.error('[TRACKER] Edit error:', e);
+    }
+}
+
+// --------------------------------------------------------------------------
+// Delete bet
+// --------------------------------------------------------------------------
+async function deleteBet(betId) {
+    if (!confirm('Are you sure you want to delete this bet?')) return;
+
+    try {
+        const res = await fetch(`/api/tracker/bets/${betId}`, { method: 'DELETE' });
+        if (res.ok) {
+            document.body.dispatchEvent(new Event('refreshBets'));
+            document.body.dispatchEvent(new Event('refreshSummary'));
+        } else {
+            alert('Failed to delete bet.');
+        }
+    } catch (e) {
+        console.error('[TRACKER] Delete error:', e);
+    }
+}
+
+// --------------------------------------------------------------------------
+// Format summary stats
+// --------------------------------------------------------------------------
+function formatSummary(data) {
+    const total   = data.total_bets   ?? 0;
+    const won     = data.won          ?? 0;
+    const lost    = data.lost         ?? 0;
+    const winRate = data.win_rate     ?? 0;
+    const pnl     = data.total_pnl   ?? 0;
+
+    document.getElementById('stat-total-value').textContent   = total;
+    document.getElementById('stat-won-value').textContent     = won;
+    document.getElementById('stat-lost-value').textContent    = lost;
+    document.getElementById('stat-winrate-value').textContent = winRate.toFixed(1) + '%';
+
+    const pnlEl = document.getElementById('stat-pnl-value');
+    pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+    pnlEl.style.color = pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    const pnlCard = document.getElementById('stat-pnl');
+    pnlCard.classList.remove('positive', 'negative');
+    pnlCard.classList.add(pnl >= 0 ? 'positive' : 'negative');
+}
+
+// --------------------------------------------------------------------------
+// Format bets table
+// --------------------------------------------------------------------------
+function formatBetsTable(bets) {
+    allBets = bets || [];
+    const tbody = document.getElementById('bets-table-body');
+
+    if (!allBets.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align: center; padding: var(--space-xl);">
+                    <div class="empty-state-component">
+                        <h3>No Bets Recorded</h3>
+                        <p>Click "Add Bet" to start tracking your bets.</p>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = allBets.map(bet => {
+        const result = bet.result || 'pending';
+        const rs = RESULT_STYLES[result] || RESULT_STYLES.pending;
+        const pnl = bet.pnl ?? 0;
+        const pnlColor = pnl > 0 ? 'var(--success)' : pnl < 0 ? 'var(--danger)' : 'var(--text-secondary)';
+        const dateStr = bet.date ? new Date(bet.date).toLocaleDateString() : '-';
+
+        return `
+            <tr>
+                <td>${dateStr}</td>
+                <td>${escapeHtml(bet.match || '')}</td>
+                <td><span class="pill">${escapeHtml(bet.market || '')}</span></td>
+                <td>${escapeHtml(bet.selection || '')}</td>
+                <td class="text-right" style="font-family: var(--font-mono);">${(bet.odds || 0).toFixed(2)}</td>
+                <td class="text-right" style="font-family: var(--font-mono);">${(bet.stake || 0).toFixed(2)}</td>
+                <td class="text-center">
+                    <span class="badge" style="background: ${rs.bg}; color: ${rs.color};">${rs.label}</span>
+                </td>
+                <td class="text-right" style="font-family: var(--font-mono); font-weight: 700; color: ${pnlColor};">
+                    ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                </td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-secondary" onclick="openEditModal('${bet.id}', '${result}')" title="Edit result">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteBet('${bet.id}')" title="Delete bet" style="margin-left: 0.25rem;">Del</button>
+                </td>
+            </tr>`;
+    }).join('');
+}
+
+// --------------------------------------------------------------------------
+// Charts
+// --------------------------------------------------------------------------
+function initCharts() {
+    if (!allBets.length) return;
+
+    const chartDefaults = {
+        color: '#8892b0',
+        borderColor: 'rgba(255,255,255,0.06)'
+    };
+    Chart.defaults.color = chartDefaults.color;
+    Chart.defaults.borderColor = chartDefaults.borderColor;
+
+    // Cumulative P&L line chart
+    const sortedBets = [...allBets]
+        .filter(b => b.result === 'won' || b.result === 'lost')
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    let cumulative = 0;
+    const pnlLabels = [];
+    const pnlData = [];
+
+    sortedBets.forEach(bet => {
+        cumulative += (bet.pnl || 0);
+        pnlLabels.push(bet.date ? new Date(bet.date).toLocaleDateString() : '');
+        pnlData.push(parseFloat(cumulative.toFixed(2)));
+    });
+
+    const pnlCtx = document.getElementById('chart-pnl').getContext('2d');
+    if (pnlChart) pnlChart.destroy();
+    pnlChart = new Chart(pnlCtx, {
+        type: 'line',
+        data: {
+            labels: pnlLabels,
+            datasets: [{
+                label: 'Cumulative P&L',
+                data: pnlData,
+                borderColor: '#00ff85',
+                backgroundColor: 'rgba(0, 255, 133, 0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointBackgroundColor: '#00ff85'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: {
+                        callback: v => (v >= 0 ? '+' : '') + v.toFixed(0)
+                    }
+                }
+            }
+        }
+    });
+
+    // ROI by Market doughnut chart
+    const marketMap = {};
+    allBets.forEach(bet => {
+        const m = bet.market || 'Other';
+        if (!marketMap[m]) marketMap[m] = { totalStake: 0, totalPnl: 0 };
+        marketMap[m].totalStake += (bet.stake || 0);
+        marketMap[m].totalPnl   += (bet.pnl || 0);
+    });
+
+    const marketLabels = Object.keys(marketMap);
+    const marketROI = marketLabels.map(m => {
+        const s = marketMap[m].totalStake;
+        return s > 0 ? parseFloat(((marketMap[m].totalPnl / s) * 100).toFixed(1)) : 0;
+    });
+
+    const doughnutColors = [
+        '#00ff85', '#e90052', '#ffc107', '#6387ff', '#a050ff',
+        '#00bcd4', '#ff6b35', '#8bc34a'
+    ];
+
+    const roiCtx = document.getElementById('chart-roi').getContext('2d');
+    if (roiChart) roiChart.destroy();
+    roiChart = new Chart(roiCtx, {
+        type: 'doughnut',
+        data: {
+            labels: marketLabels,
+            datasets: [{
+                data: marketROI.map(Math.abs),
+                backgroundColor: doughnutColors.slice(0, marketLabels.length),
+                borderColor: 'rgba(10, 10, 26, 0.8)',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 16,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            const idx = ctx.dataIndex;
+                            const roi = marketROI[idx];
+                            return ` ${ctx.label}: ${roi >= 0 ? '+' : ''}${roi}% ROI`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// --------------------------------------------------------------------------
+// HTMX afterSwap handler
+// --------------------------------------------------------------------------
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    const target = event.detail.target;
+
+    if (target.id === 'tracker-summary-loader') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            formatSummary(data);
+        } catch (e) {
+            console.error('[TRACKER] Summary parse error:', e);
+        }
+    }
+
+    if (target.id === 'tracker-bets-loader') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            const bets = data.bets || data;
+            formatBetsTable(Array.isArray(bets) ? bets : []);
+            initCharts();
+        } catch (e) {
+            console.error('[TRACKER] Bets parse error:', e);
+        }
+    }
+});
+
+// --------------------------------------------------------------------------
+// Utility
+// --------------------------------------------------------------------------
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

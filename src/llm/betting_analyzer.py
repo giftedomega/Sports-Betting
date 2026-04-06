@@ -21,6 +21,18 @@ class BettingAnalyzer:
     def __init__(self):
         """Initialize betting analyzer."""
         self.client = OllamaClient()
+        self._intelligence = None
+
+    @property
+    def intelligence(self):
+        """Lazy-load intelligence pipeline."""
+        if self._intelligence is None:
+            try:
+                from src.llm.intelligence import IntelligencePipeline
+                self._intelligence = IntelligencePipeline()
+            except Exception as e:
+                logger.warning(f"Intelligence pipeline unavailable: {e}")
+        return self._intelligence
 
     async def analyze_match(
         self,
@@ -30,31 +42,35 @@ class BettingAnalyzer:
         h2h_history: Optional[List[Dict]] = None,
         news_context: Optional[List[Dict]] = None,
         injuries: Optional[Dict] = None,
+        odds_data: Optional[Dict] = None,
+        weather_data: Optional[Dict] = None,
     ) -> Dict:
-        """Perform comprehensive match analysis for betting predictions.
-
-        Args:
-            fixture: Match fixture details
-            home_team_data: Home team stats and form
-            away_team_data: Away team stats and form
-            h2h_history: Head-to-head match history
-            news_context: Recent news about teams
-            injuries: Injury/suspension information
-
-        Returns:
-            Analysis dict with predictions and recommendations
-        """
+        """Perform comprehensive match analysis for betting predictions."""
         home_team = fixture.get("home_team", home_team_data.get("name", "Home"))
         away_team = fixture.get("away_team", away_team_data.get("name", "Away"))
 
         try:
-            # Build context
+            # Get intelligence profiles if available
+            intel_home = None
+            intel_away = None
+            if self.intelligence:
+                try:
+                    intel_home = await self.intelligence.aggregate_team_profile(home_team)
+                    intel_away = await self.intelligence.aggregate_team_profile(away_team)
+                except Exception as e:
+                    logger.warning(f"Intelligence profiles unavailable: {e}")
+
+            # Build context with all available data
             context = build_match_context(
                 home_team_data=home_team_data,
                 away_team_data=away_team_data,
                 h2h_history=h2h_history,
                 news_articles=news_context,
-                injuries=injuries
+                injuries=injuries,
+                odds_data=odds_data,
+                weather_data=weather_data,
+                intelligence_home=intel_home,
+                intelligence_away=intel_away,
             )
 
             # Build prompt
@@ -86,6 +102,16 @@ class BettingAnalyzer:
             analysis["away_team"] = away_team
             analysis["analyzed_at"] = datetime.now().isoformat()
 
+            # Include odds in response if available
+            if odds_data:
+                analysis["odds"] = {
+                    "home_win": odds_data.get("home_win_odds"),
+                    "draw": odds_data.get("draw_odds"),
+                    "away_win": odds_data.get("away_win_odds"),
+                    "over_2_5": odds_data.get("over_2_5_odds"),
+                    "under_2_5": odds_data.get("under_2_5_odds"),
+                }
+
             logger.info(f"Completed analysis for {home_team} vs {away_team}")
             return analysis
 
@@ -103,35 +129,22 @@ class BettingAnalyzer:
             }
 
     def _parse_response(self, response: str) -> Dict:
-        """Parse AI response into structured format.
-
-        Args:
-            response: Raw AI response text
-
-        Returns:
-            Parsed analysis dict
-        """
+        """Parse AI response into structured format."""
         try:
-            # Try to extract JSON from response
             json_text = None
 
-            # Method 1: Look for ```json code block
             if "```json" in response:
                 start = response.find("```json") + 7
                 end = response.find("```", start)
                 json_text = response[start:end].strip()
-
-            # Method 2: Look for ``` code block
             elif "```" in response:
                 start = response.find("```") + 3
                 end = response.find("```", start)
                 json_text = response[start:end].strip()
 
-            # Method 3: Find JSON object
             if not json_text or not json_text.startswith("{"):
                 start_idx = response.find("{")
                 if start_idx != -1:
-                    # Find matching closing brace
                     brace_count = 0
                     end_idx = start_idx
                     for i, char in enumerate(response[start_idx:], start_idx):
@@ -147,7 +160,6 @@ class BettingAnalyzer:
 
             if json_text:
                 analysis = json.loads(json_text)
-                # Ensure required fields exist
                 analysis.setdefault("predicted_outcome", "unknown")
                 analysis.setdefault("confidence", 0)
                 analysis.setdefault("recommended_bets", [])
@@ -156,7 +168,6 @@ class BettingAnalyzer:
                 analysis.setdefault("summary", "")
                 return analysis
 
-            # Return default if parsing fails
             logger.warning("Failed to parse JSON from response")
             return {
                 "predicted_outcome": "unknown",
@@ -184,19 +195,18 @@ class BettingAnalyzer:
         self,
         fixtures: List[Dict],
         team_stats: Dict[str, Dict],
-        news: Optional[List[Dict]] = None
+        news: Optional[List[Dict]] = None,
+        odds: Optional[List[Dict]] = None,
     ) -> List[Dict]:
-        """Analyze multiple fixtures.
-
-        Args:
-            fixtures: List of fixtures to analyze
-            team_stats: Dict of team name -> stats
-            news: Recent news articles
-
-        Returns:
-            List of analysis results
-        """
+        """Analyze multiple fixtures."""
         results = []
+
+        # Build odds lookup
+        odds_lookup = {}
+        if odds:
+            for o in odds:
+                key = f"{o.get('home_team')}_{o.get('away_team')}"
+                odds_lookup[key] = o
 
         for fixture in fixtures:
             home_team = fixture.get("home_team")
@@ -213,11 +223,15 @@ class BettingAnalyzer:
                     if home_team in teams_mentioned or away_team in teams_mentioned:
                         fixture_news.append(article)
 
+            # Get odds for this fixture
+            fixture_odds = odds_lookup.get(f"{home_team}_{away_team}")
+
             analysis = await self.analyze_match(
                 fixture=fixture,
                 home_team_data=home_data,
                 away_team_data=away_data,
-                news_context=fixture_news[:10]
+                news_context=fixture_news[:10],
+                odds_data=fixture_odds,
             )
             results.append(analysis)
 
@@ -230,17 +244,7 @@ class BettingAnalyzer:
         home_position: int = 10,
         away_position: int = 10
     ) -> Dict:
-        """Quick prediction with minimal data.
-
-        Args:
-            home_team: Home team name
-            away_team: Away team name
-            home_position: Home team league position
-            away_position: Away team league position
-
-        Returns:
-            Quick analysis dict
-        """
+        """Quick prediction with minimal data."""
         fixture = {
             "home_team": home_team,
             "away_team": away_team,

@@ -1,0 +1,280 @@
+/* ==========================================================================
+   Premier League Betting Analytics - Animations
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Keyframe Definitions
+   -------------------------------------------------------------------------- */
+
+/* Shimmer - skeleton loading effect */
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Slide in - toast notifications from top right */
+@keyframes slideIn {
+    0% {
+        opacity: 0;
+        transform: translateX(40px) translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0) translateY(0);
+    }
+}
+
+/* Slide out - toast dismissal */
+@keyframes slideOut {
+    0% {
+        opacity: 1;
+        transform: translateX(0) translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(40px) translateY(-10px);
+    }
+}
+
+/* Pulse - live indicators, status dots */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Fade in */
+@keyframes fadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Count up - stat number counter effect (visual only, pair with JS) */
+@keyframes countUp {
+    0% {
+        opacity: 0;
+        transform: translateY(16px);
+        filter: blur(4px);
+    }
+    60% {
+        filter: blur(0px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0px);
+    }
+}
+
+/* Glow pulse - for highlighted elements */
+@keyframes glowPulse {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(0, 255, 133, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(0, 255, 133, 0.4);
+    }
+}
+
+/* Spin - for loading spinners */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Scale in - for modals, popovers */
+@keyframes scaleIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* --------------------------------------------------------------------------
+   Animation Utility Classes
+   -------------------------------------------------------------------------- */
+
+/* Fade in with upward motion */
+.animate-in {
+    animation: fadeIn 0.4s ease forwards;
+}
+
+/* Staggered children animation */
+.animate-stagger > * {
+    opacity: 0;
+    animation: fadeIn 0.4s ease forwards;
+}
+
+.animate-stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.animate-stagger > *:nth-child(2) { animation-delay: 0.1s; }
+.animate-stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.animate-stagger > *:nth-child(4) { animation-delay: 0.2s; }
+.animate-stagger > *:nth-child(5) { animation-delay: 0.25s; }
+.animate-stagger > *:nth-child(6) { animation-delay: 0.3s; }
+.animate-stagger > *:nth-child(7) { animation-delay: 0.35s; }
+.animate-stagger > *:nth-child(8) { animation-delay: 0.4s; }
+.animate-stagger > *:nth-child(9) { animation-delay: 0.45s; }
+.animate-stagger > *:nth-child(10) { animation-delay: 0.5s; }
+.animate-stagger > *:nth-child(n+11) { animation-delay: 0.55s; }
+
+/* Count up animation for stat numbers */
+.animate-count {
+    animation: countUp 0.6s ease forwards;
+}
+
+/* Pulse animation for live indicators */
+.animate-pulse {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Glow pulse for highlighted cards */
+.animate-glow {
+    animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Spin for loading states */
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Card Hover Effects
+   -------------------------------------------------------------------------- */
+.card {
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.stat-card {
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Subtle lift for clickable elements */
+.hover-lift {
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Scale on hover for interactive items */
+.hover-scale {
+    transition: transform var(--transition-fast);
+}
+
+.hover-scale:hover {
+    transform: scale(1.02);
+}
+
+/* --------------------------------------------------------------------------
+   Button & Badge Transitions
+   -------------------------------------------------------------------------- */
+
+/* Buttons get smooth color/shadow transitions */
+.btn {
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+/* Badges get smooth color transitions */
+.badge {
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.pill {
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+/* --------------------------------------------------------------------------
+   Link & Navigation Transitions
+   -------------------------------------------------------------------------- */
+.nav-links a {
+    transition:
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+/* Underline animation is handled via ::after transform in styles.css */
+
+/* --------------------------------------------------------------------------
+   Table Row Transitions
+   -------------------------------------------------------------------------- */
+.data-table tbody tr,
+.league-table tbody tr {
+    transition: background var(--transition-fast);
+}
+
+/* --------------------------------------------------------------------------
+   Form Focus Transitions
+   -------------------------------------------------------------------------- */
+input, textarea, select {
+    transition:
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        background var(--transition-fast);
+}
+
+/* --------------------------------------------------------------------------
+   Reduced Motion
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .animate-stagger > * {
+        animation: none;
+        opacity: 1;
+    }
+
+    .card:hover,
+    .stat-card:hover,
+    .hover-lift:hover {
+        transform: none;
+    }
+}

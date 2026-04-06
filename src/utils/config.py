@@ -23,7 +23,7 @@ def get_config_base_dir() -> Path:
 
 class LLMConfig(BaseModel):
     """LLM configuration."""
-    model: str = "gemma2:9b"
+    model: str = "gemma3:12b"
     ollama_host: str = "http://localhost:11434"
     max_concurrent: int = 2
     temperature: float = 0.3
@@ -42,6 +42,20 @@ class SportMonksConfig(BaseModel):
     primary: bool = True
 
 
+class OddsApiConfig(BaseModel):
+    """The-Odds-API configuration."""
+    api_key: str = ""
+    regions: str = "uk"
+    markets: str = "h2h,totals"
+
+
+class IntelligenceConfig(BaseModel):
+    """Intelligence pipeline configuration."""
+    batch_size: int = 10
+    aggregation_interval: int = 7200
+    insight_ttl_hours: int = 168
+
+
 class ScrapingConfig(BaseModel):
     """Scraping configuration."""
     sources: List[str] = Field(default_factory=lambda: ["fbref", "rss_news"])
@@ -56,6 +70,11 @@ class SchedulerConfig(BaseModel):
     stats_interval: int = 1800
     news_interval: int = 900
     lineups_interval: int = 600
+    odds_interval: int = 1800
+    injury_interval: int = 14400
+    weather_interval: int = 21600
+    intelligence_interval: int = 7200
+    player_form_interval: int = 43200
 
 
 class NewsSourceConfig(BaseModel):
@@ -89,6 +108,8 @@ class AppConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     sportmonks: SportMonksConfig = Field(default_factory=SportMonksConfig)
+    odds_api: OddsApiConfig = Field(default_factory=OddsApiConfig)
+    intelligence: IntelligenceConfig = Field(default_factory=IntelligenceConfig)
     scraping: ScrapingConfig = Field(default_factory=ScrapingConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     news: NewsConfig = Field(default_factory=NewsConfig)

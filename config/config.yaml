@@ -1,7 +1,7 @@
 # AI Football Betting Analysis Configuration
 
 llm:
-  model: "gemma2:9b"
+  model: "gemma3:12b"
   ollama_host: "http://localhost:11434"
   max_concurrent: 2
   temperature: 0.3
@@ -15,6 +15,16 @@ sportmonks:
   api_key: ""
   primary: false  # Disabled - using free scrapers instead
 
+odds_api:
+  api_key: ""  # Free tier key from https://the-odds-api.com
+  regions: "uk"
+  markets: "h2h,totals"
+
+intelligence:
+  batch_size: 10
+  aggregation_interval: 7200  # 2 hours
+  insight_ttl_hours: 168  # 7 days
+
 scraping:
   sources:
     - sportmonks
@@ -25,6 +35,9 @@ scraping:
     fbref: 3
     rss: 1
     sofascore: 12
+    odds_api: 5
+    fpl: 2
+    weather: 1
   cache_dir: "~/.soccerdata"
   season: "2526"
 
@@ -33,6 +46,11 @@ scheduler:
   stats_interval: 1800
   news_interval: 900
   lineups_interval: 600
+  odds_interval: 1800
+  injury_interval: 14400
+  weather_interval: 21600
+  intelligence_interval: 7200
+  player_form_interval: 43200
 
 news:
   sources:
@@ -42,6 +60,14 @@ news:
       url: "https://feeds.bbci.co.uk/sport/football/rss.xml"
     - name: "Guardian Football"
       url: "https://www.theguardian.com/football/rss"
+    - name: "ESPN FC"
+      url: "https://www.espn.com/espn/rss/soccer/news"
+    - name: "Mirror Football"
+      url: "https://www.mirror.co.uk/sport/football/rss.xml"
+    - name: "TeamTalk"
+      url: "https://www.teamtalk.com/feed"
+    - name: "Football365"
+      url: "https://www.football365.com/feed"
   update_interval: 900
   cache_ttl: 600
 

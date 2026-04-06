@@ -1,14 +1,15 @@
 """Prompt templates for AI betting analysis."""
 
 BETTING_ANALYSIS_SYSTEM_PROMPT = """You are an expert football betting analyst specializing in Premier League matches.
-You analyze team statistics, form, head-to-head records, injuries, lineups, and news to provide betting predictions.
+You analyze team statistics, form, head-to-head records, injuries, lineups, odds, xG data, weather, and news to provide betting predictions.
 
 Your analysis must be:
 1. Data-driven and objective
-2. Consider all available information
-3. Identify value bets (where odds may be mispriced)
+2. Consider all available information including xG, odds value, and intelligence profiles
+3. Identify value bets (where odds may be mispriced relative to true probability)
 4. Provide clear confidence levels
 5. Highlight key risk factors
+6. Factor in weather conditions and injury impacts
 
 IMPORTANT: Always respond with valid JSON in the specified format. No explanations outside the JSON structure."""
 
@@ -61,6 +62,8 @@ Form (last 5): {home_form}
 Played: {home_played} | Won: {home_won} | Drawn: {home_drawn} | Lost: {home_lost}
 Goals: {home_gf} scored, {home_ga} conceded
 Points: {home_points}
+xG: {home_xg} | xGA: {home_xga} | xG Diff: {home_xg_diff}
+Possession: {home_possession}% | Shots: {home_shots} | On Target: {home_sot}
 
 === AWAY TEAM: {away_team} ===
 Position: {away_position}
@@ -68,6 +71,11 @@ Form (last 5): {away_form}
 Played: {away_played} | Won: {away_won} | Drawn: {away_drawn} | Lost: {away_lost}
 Goals: {away_gf} scored, {away_ga} conceded
 Points: {away_points}
+xG: {away_xg} | xGA: {away_xga} | xG Diff: {away_xg_diff}
+Possession: {away_possession}% | Shots: {away_shots} | On Target: {away_sot}
+
+=== ODDS ===
+{odds_context}
 
 === HEAD-TO-HEAD ===
 {h2h_summary}
@@ -77,6 +85,14 @@ Points: {away_points}
 
 === INJURIES/SUSPENSIONS ===
 {injuries_summary}
+
+=== WEATHER ===
+{weather_context}
+
+=== AI INTELLIGENCE ===
+{intelligence_home}
+
+{intelligence_away}
 """
 
 NEWS_SUMMARY_TEMPLATE = """- [{source}] {title} ({sentiment}, {impact} impact)"""
@@ -93,7 +109,11 @@ def build_match_context(
     away_team_data: dict,
     h2h_history: list = None,
     news_articles: list = None,
-    injuries: dict = None
+    injuries: dict = None,
+    odds_data: dict = None,
+    weather_data: dict = None,
+    intelligence_home: str = None,
+    intelligence_away: str = None,
 ) -> str:
     """Build context string for AI analysis.
 
@@ -103,6 +123,10 @@ def build_match_context(
         h2h_history: Head-to-head match history
         news_articles: Recent news articles
         injuries: Injury/suspension information
+        odds_data: Current odds for the match
+        weather_data: Weather forecast for the match
+        intelligence_home: AI intelligence profile for home team
+        intelligence_away: AI intelligence profile for away team
 
     Returns:
         Formatted context string
@@ -155,11 +179,37 @@ def build_match_context(
         if injury_lines:
             injuries_summary = "\n".join(injury_lines)
 
+    # Build odds context
+    odds_context = "No odds data available"
+    if odds_data:
+        odds_lines = []
+        if odds_data.get("home_win_odds"):
+            odds_lines.append(f"Match Result: Home {odds_data['home_win_odds']} | Draw {odds_data.get('draw_odds', 'N/A')} | Away {odds_data.get('away_win_odds', 'N/A')}")
+        if odds_data.get("over_2_5_odds"):
+            odds_lines.append(f"Over/Under 2.5: Over {odds_data['over_2_5_odds']} | Under {odds_data.get('under_2_5_odds', 'N/A')}")
+        if odds_data.get("btts_yes_odds"):
+            odds_lines.append(f"BTTS: Yes {odds_data['btts_yes_odds']} | No {odds_data.get('btts_no_odds', 'N/A')}")
+        if odds_lines:
+            odds_context = "\n".join(odds_lines)
+
+    # Build weather context
+    weather_context = "No weather data available"
+    if weather_data:
+        weather_context = (
+            f"Temperature: {weather_data.get('temperature', 'N/A')}°C | "
+            f"Precipitation: {weather_data.get('precipitation_prob', 'N/A')}% | "
+            f"Wind: {weather_data.get('wind_speed', 'N/A')} km/h | "
+            f"Condition: {weather_data.get('condition', 'N/A')}"
+        )
+
     # Build full context
+    def _safe(val, default="N/A"):
+        return val if val is not None else default
+
     context = MATCH_CONTEXT_TEMPLATE.format(
         home_team=home_team_data.get("name", "Home Team"),
-        home_position=home_team_data.get("position", "N/A"),
-        home_form=home_team_data.get("form", "N/A"),
+        home_position=_safe(home_team_data.get("position")),
+        home_form=_safe(home_team_data.get("form")),
         home_played=home_team_data.get("played", 0),
         home_won=home_team_data.get("won", 0),
         home_drawn=home_team_data.get("drawn", 0),
@@ -167,9 +217,15 @@ def build_match_context(
         home_gf=home_team_data.get("goals_for", 0),
         home_ga=home_team_data.get("goals_against", 0),
         home_points=home_team_data.get("points", 0),
+        home_xg=_safe(home_team_data.get("team_xg")),
+        home_xga=_safe(home_team_data.get("team_xga")),
+        home_xg_diff=_safe(home_team_data.get("xg_difference")),
+        home_possession=_safe(home_team_data.get("possession")),
+        home_shots=home_team_data.get("shots", 0),
+        home_sot=home_team_data.get("shots_on_target", 0),
         away_team=away_team_data.get("name", "Away Team"),
-        away_position=away_team_data.get("position", "N/A"),
-        away_form=away_team_data.get("form", "N/A"),
+        away_position=_safe(away_team_data.get("position")),
+        away_form=_safe(away_team_data.get("form")),
         away_played=away_team_data.get("played", 0),
         away_won=away_team_data.get("won", 0),
         away_drawn=away_team_data.get("drawn", 0),
@@ -177,9 +233,19 @@ def build_match_context(
         away_gf=away_team_data.get("goals_for", 0),
         away_ga=away_team_data.get("goals_against", 0),
         away_points=away_team_data.get("points", 0),
+        away_xg=_safe(away_team_data.get("team_xg")),
+        away_xga=_safe(away_team_data.get("team_xga")),
+        away_xg_diff=_safe(away_team_data.get("xg_difference")),
+        away_possession=_safe(away_team_data.get("possession")),
+        away_shots=away_team_data.get("shots", 0),
+        away_sot=away_team_data.get("shots_on_target", 0),
+        odds_context=odds_context,
         h2h_summary=h2h_summary,
         news_summary=news_summary,
-        injuries_summary=injuries_summary
+        injuries_summary=injuries_summary,
+        weather_context=weather_context,
+        intelligence_home=intelligence_home or "No intelligence profile available",
+        intelligence_away=intelligence_away or "No intelligence profile available",
     )
 
     return context

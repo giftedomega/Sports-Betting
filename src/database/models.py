@@ -46,6 +46,16 @@ class Team(Base):
     away_goals_for = Column(Integer, default=0)
     away_goals_against = Column(Integer, default=0)
 
+    # Advanced stats (xG, shots, possession)
+    team_xg = Column(Float)
+    team_xga = Column(Float)
+    xg_difference = Column(Float)
+    shots = Column(Integer, default=0)
+    shots_on_target = Column(Integer, default=0)
+    possession = Column(Float)
+    clean_sheets = Column(Integer, default=0)
+    avg_rating = Column(Float)
+
     last_updated = Column(DateTime, default=datetime.now)
 
     # Relationships
@@ -74,6 +84,17 @@ class Player(Base):
     yellow_cards = Column(Integer, default=0)
     red_cards = Column(Integer, default=0)
 
+    # xG stats
+    xg = Column(Float)
+    xa = Column(Float)
+    npxg = Column(Float)
+    shots = Column(Integer, default=0)
+    shots_on_target = Column(Integer, default=0)
+    xg_per90 = Column(Float)
+
+    # Form
+    current_form_rating = Column(Float)
+
     # Injury/availability
     is_injured = Column(Boolean, default=False)
     injury_description = Column(String(500))
@@ -84,6 +105,7 @@ class Player(Base):
 
     # Relationships
     team = relationship("Team", back_populates="players")
+    match_ratings = relationship("PlayerMatchRating", back_populates="player")
 
 
 class Fixture(Base):
@@ -112,8 +134,17 @@ class Fixture(Base):
     btts_yes_odds = Column(Float)
     btts_no_odds = Column(Float)
 
+    # Weather
+    temperature = Column(Float)
+    precipitation_prob = Column(Float)
+    wind_speed = Column(Float)
+
+    # Referee
+    referee = Column(String(100))
+
     # External IDs
     fbref_match_id = Column(String(50))
+    sofascore_id = Column(Integer)
 
     created_at = Column(DateTime, default=datetime.now)
     last_updated = Column(DateTime, default=datetime.now)
@@ -237,6 +268,78 @@ class ScrapingLog(Base):
     records_fetched = Column(Integer)
     error_message = Column(Text)
     timestamp = Column(DateTime, default=datetime.now, index=True)
+
+
+class DataInsight(Base):
+    """LLM-generated intelligence insights from data batches."""
+    __tablename__ = "data_insights"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String(50), index=True)  # team_analysis, player_analysis, news_intelligence, odds_analysis, h2h_analysis, season_prediction
+    entity_type = Column(String(20), index=True)  # team, player, match, league
+    entity_name = Column(String(200), index=True)  # team name, player name, etc.
+
+    summary = Column(Text, nullable=False)
+    key_points = Column(JSON)
+    raw_data_hash = Column(String(64))  # Hash to avoid reprocessing identical data
+
+    confidence = Column(Float)
+    sentiment = Column(String(20))  # positive, negative, neutral
+    impact_level = Column(String(20))  # high, medium, low
+
+    source_data = Column(JSON)  # Raw data that was analyzed
+    model_used = Column(String(100))
+
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    expires_at = Column(DateTime)
+
+
+class PlayerMatchRating(Base):
+    """Per-match player performance ratings."""
+    __tablename__ = "player_match_ratings"
+
+    id = Column(Integer, primary_key=True)
+    player_id = Column(Integer, ForeignKey("players.id"), index=True)
+    fixture_id = Column(Integer, ForeignKey("fixtures.id"), index=True)
+
+    rating = Column(Float)
+    goals = Column(Integer, default=0)
+    assists = Column(Integer, default=0)
+    minutes_played = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships
+    player = relationship("Player", back_populates="match_ratings")
+
+
+class TrackedBet(Base):
+    """User-tracked bets for P&L tracking."""
+    __tablename__ = "tracked_bets"
+
+    id = Column(Integer, primary_key=True)
+    fixture_id = Column(Integer, ForeignKey("fixtures.id"), nullable=True)
+    placed_at = Column(DateTime, default=datetime.now)
+    match_description = Column(String(200))
+    market = Column(String(50))  # 1X2, Over/Under, BTTS, etc.
+    selection = Column(String(100))
+    odds = Column(Float)
+    stake = Column(Float)
+    result = Column(String(20))  # won, lost, void, pending
+    returns = Column(Float)
+    profit_loss = Column(Float)
+    notes = Column(Text)
+
+
+class BankrollEntry(Base):
+    """Bankroll tracking over time."""
+    __tablename__ = "bankroll_entries"
+
+    id = Column(Integer, primary_key=True)
+    date = Column(DateTime, default=datetime.now, index=True)
+    balance = Column(Float)
+    change = Column(Float)
+    bet_id = Column(Integer, ForeignKey("tracked_bets.id"), nullable=True)
 
 
 def get_database_url(path: str = "data/database.db") -> str:

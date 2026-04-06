@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}AI Intelligence - Premier League Betting Analysis{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/components.css">
+{% endblock %}
+
+{% block content %}
+<div class="intelligence-page">
+    <header class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <h1>AI Intelligence</h1>
+            <p>LLM-powered insights and analysis</p>
+        </div>
+        <button class="btn btn-primary"
+                hx-post="/api/intelligence/refresh"
+                hx-swap="none"
+                hx-indicator="#refresh-spinner">
+            <span id="refresh-spinner" class="htmx-indicator" style="display:none;">Refreshing...</span>
+            <span>Refresh Intelligence</span>
+        </button>
+    </header>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar" id="insight-filters" style="margin-bottom: var(--space-xl);">
+        <button class="btn active" data-category="all">All</button>
+        <button class="btn" data-category="team_analysis">Team Analysis</button>
+        <button class="btn" data-category="news_intel">News Intel</button>
+        <button class="btn" data-category="odds_analysis">Odds Analysis</button>
+        <button class="btn" data-category="season_prediction">Season Prediction</button>
+    </div>
+
+    <!-- Two-Column Layout -->
+    <div style="display: grid; grid-template-columns: 65fr 35fr; gap: var(--space-lg);">
+
+        <!-- Left Column: Insights Feed -->
+        <div>
+            <div class="card">
+                <h2>Insights Feed</h2>
+                <div id="insights-feed"
+                     hx-get="/api/intelligence/insights?limit=30"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="loading">Loading insights...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Quick Actions -->
+        <div>
+            <!-- Season Prediction Generator -->
+            <div class="card">
+                <h2>Season Prediction</h2>
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: var(--space-md);">
+                    Generate AI-powered season outcome predictions including title race and relegation probabilities.
+                </p>
+                <button class="btn btn-primary" style="width: 100%; margin-bottom: var(--space-lg);"
+                        hx-post="/api/intelligence/season-prediction/generate"
+                        hx-target="#season-prediction-results"
+                        hx-swap="innerHTML"
+                        hx-indicator="#prediction-spinner">
+                    <span id="prediction-spinner" class="htmx-indicator" style="display:none;">Generating...</span>
+                    <span>Generate Prediction</span>
+                </button>
+
+                <div id="season-prediction-results"
+                     hx-get="/api/intelligence/season-prediction"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="empty-state-component">
+                        <div class="empty-icon">&#x1F3C6;</div>
+                        <h3>No Predictions Yet</h3>
+                        <p>Click Generate to create season predictions.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --------------------------------------------------------------------------
+// Category color mapping
+// --------------------------------------------------------------------------
+const CATEGORY_COLORS = {
+    injury:   { bg: 'rgba(233, 0, 82, 0.12)',   color: 'var(--danger)'  },
+    form:     { bg: 'rgba(99, 135, 255, 0.12)',  color: '#6387ff'        },
+    tactical: { bg: 'rgba(160, 80, 255, 0.12)',  color: '#a050ff'        },
+    transfer: { bg: 'rgba(0, 255, 133, 0.12)',   color: 'var(--success)' },
+    odds:     { bg: 'rgba(255, 193, 7, 0.12)',   color: 'var(--warning)' }
+};
+
+const IMPACT_CLASSES = {
+    high:   'badge-danger',
+    medium: 'badge-warning',
+    low:    'badge-success'
+};
+
+// --------------------------------------------------------------------------
+// Filter handling
+// --------------------------------------------------------------------------
+let activeCategory = 'all';
+
+document.getElementById('insight-filters').addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-category]');
+    if (!btn) return;
+
+    // Update active pill
+    this.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    activeCategory = btn.dataset.category;
+    filterInsights();
+});
+
+function filterInsights() {
+    const cards = document.querySelectorAll('#insights-feed .insight-card');
+    cards.forEach(card => {
+        if (activeCategory === 'all' || card.dataset.category === activeCategory) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+// --------------------------------------------------------------------------
+// Format insights from JSON
+// --------------------------------------------------------------------------
+function formatInsights(insights) {
+    if (!insights || insights.length === 0) {
+        return `
+            <div class="empty-state-component">
+                <div class="empty-icon">&#x1F4A1;</div>
+                <h3>No Insights Available</h3>
+                <p>Refresh intelligence to generate new insights.</p>
+            </div>`;
+    }
+
+    return insights.map(insight => {
+        const cat = insight.category || 'form';
+        const catStyle = CATEGORY_COLORS[cat] || CATEGORY_COLORS.form;
+        const impactClass = IMPACT_CLASSES[insight.impact] || 'badge-info';
+        const timestamp = insight.timestamp
+            ? new Date(insight.timestamp).toLocaleString()
+            : '';
+
+        const keyPoints = (insight.key_points && insight.key_points.length)
+            ? `<ul style="margin-top: var(--space-sm); padding-left: var(--space-md); list-style: disc;">
+                ${insight.key_points.map(p => `<li style="color: var(--text-secondary); font-size: 0.8125rem; margin-bottom: 0.25rem;">${escapeHtml(p)}</li>`).join('')}
+               </ul>`
+            : '';
+
+        return `
+            <div class="insight-card news-item-card impact-${insight.impact || 'low'}"
+                 data-category="${escapeHtml(cat)}"
+                 style="margin-bottom: var(--space-md);">
+                <div style="display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;">
+                    <span class="pill"
+                          style="background: ${catStyle.bg}; color: ${catStyle.color};">
+                        ${escapeHtml(cat)}
+                    </span>
+                    ${insight.team ? `<span class="badge badge-info">${escapeHtml(insight.team)}</span>` : ''}
+                    <span class="badge ${impactClass}">${escapeHtml(insight.impact || 'low')} impact</span>
+                    <span style="margin-left: auto; font-size: 0.75rem; color: var(--text-secondary);">${timestamp}</span>
+                </div>
+                <div class="news-title" style="margin-top: var(--space-sm);">
+                    ${escapeHtml(insight.summary || '')}
+                </div>
+                ${keyPoints}
+            </div>`;
+    }).join('');
+}
+
+// --------------------------------------------------------------------------
+// Format season prediction data
+// --------------------------------------------------------------------------
+function formatSeasonPrediction(data) {
+    if (!data || (!data.title_race && !data.relegation)) {
+        return `
+            <div class="empty-state-component">
+                <div class="empty-icon">&#x1F3C6;</div>
+                <h3>No Predictions Yet</h3>
+                <p>Click Generate to create season predictions.</p>
+            </div>`;
+    }
+
+    let html = '';
+
+    // Title Race
+    if (data.title_race && data.title_race.length) {
+        html += `<h3 style="font-size: 0.9375rem; margin-bottom: var(--space-md); color: var(--text-primary);">Title Race</h3>`;
+        html += data.title_race.map((entry, i) => {
+            const pct = Math.round((entry.probability || 0) * 100);
+            return `
+                <div style="margin-bottom: var(--space-sm);">
+                    <div class="progress-bar-label">
+                        <span>${i + 1}. ${escapeHtml(entry.team)}</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700;">${pct}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: ${pct}%;"></div>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    // Relegation
+    if (data.relegation && data.relegation.length) {
+        html += `<h3 style="font-size: 0.9375rem; margin: var(--space-lg) 0 var(--space-md); color: var(--text-primary);">Relegation Risk</h3>`;
+        html += data.relegation.map((entry, i) => {
+            const pct = Math.round((entry.probability || 0) * 100);
+            return `
+                <div style="margin-bottom: var(--space-sm);">
+                    <div class="progress-bar-label">
+                        <span>${i + 1}. ${escapeHtml(entry.team)}</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700;">${pct}%</span>
+                    </div>
+                    <div class="progress-bar progress-danger">
+                        <div class="progress-bar-fill" style="width: ${pct}%;"></div>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    return html;
+}
+
+// --------------------------------------------------------------------------
+// HTMX afterSwap handler
+// --------------------------------------------------------------------------
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    const target = event.detail.target;
+
+    if (target.id === 'insights-feed') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            const insights = data.insights || data;
+            target.innerHTML = formatInsights(Array.isArray(insights) ? insights : []);
+            filterInsights();
+        } catch (e) {
+            console.error('[INTELLIGENCE] Parse error:', e);
+        }
+    }
+
+    if (target.id === 'season-prediction-results') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            target.innerHTML = formatSeasonPrediction(data);
+        } catch (e) {
+            console.error('[SEASON-PREDICTION] Parse error:', e);
+        }
+    }
+});
+
+// --------------------------------------------------------------------------
+// Utility
+// --------------------------------------------------------------------------
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

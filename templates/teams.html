@@ -2,41 +2,112 @@
 
 {% block title %}Teams - Premier League Betting Analysis{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/css/components.css">
+{% endblock %}
+
 {% block content %}
 <div class="teams-page">
+
+    <!-- Page Header -->
     <header class="page-header">
         <h1>Premier League Teams</h1>
+        <p>Full league standings with advanced metrics and squad details</p>
     </header>
 
-    <div class="league-table-full" hx-get="/api/teams/table" hx-trigger="load" hx-swap="innerHTML">
-        <div class="loading">Loading league table...</div>
+    <!-- League Table -->
+    <div class="card card-wide" style="overflow-x: auto;">
+        <h2>League Table</h2>
+        <div id="league-table-container"
+             hx-get="/api/teams/table"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+            <!-- Skeleton loader while waiting -->
+            <table class="league-table" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Pos</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th>
+                        <th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>xG</th><th>xGA</th><th>Form</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in range(20) %}
+                    <tr>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:8rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:2rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:1.5rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:2rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:2rem;">&nbsp;</div></td>
+                        <td><div class="skeleton skeleton-text" style="width:4rem;">&nbsp;</div></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* -----------------------------------------------------------------------
+   State
+   ----------------------------------------------------------------------- */
+let expandedTeam = null;
+
+/* -----------------------------------------------------------------------
+   HTMX response handlers
+   ----------------------------------------------------------------------- */
 document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.className.includes('league-table-full')) {
+    const targetId = event.detail.target.id;
+
+    // League table
+    if (targetId === 'league-table-container') {
         try {
             const data = JSON.parse(event.detail.xhr.responseText);
             if (data.table) {
-                event.detail.target.innerHTML = formatFullTable(data.table);
+                event.detail.target.innerHTML = formatLeagueTable(data.table);
             }
-        } catch (e) { }
+        } catch (e) { /* server returned HTML fragment */ }
     }
 
-    if (event.detail.target.id === 'team-detail') {
+    // Squad data
+    if (targetId.startsWith('squad-')) {
         try {
             const data = JSON.parse(event.detail.xhr.responseText);
-            event.detail.target.innerHTML = formatTeamDetail(data);
-        } catch (e) { }
+            const players = data.players || data;
+            if (Array.isArray(players)) {
+                event.detail.target.innerHTML = formatSquad(players);
+            }
+        } catch (e) { /* server returned HTML fragment */ }
+    }
+
+    // News data
+    if (targetId.startsWith('news-')) {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            const articles = data.articles || data.news || data;
+            if (Array.isArray(articles)) {
+                event.detail.target.innerHTML = formatNews(articles);
+            }
+        } catch (e) { /* server returned HTML fragment */ }
     }
 });
 
-function formatFullTable(table) {
+/* -----------------------------------------------------------------------
+   League table rendering
+   ----------------------------------------------------------------------- */
+function formatLeagueTable(table) {
     return `
-        <table class="league-table full">
+        <table class="league-table" style="width:100%;">
             <thead>
                 <tr>
                     <th>Pos</th>
@@ -49,83 +120,235 @@ function formatFullTable(table) {
                     <th>GA</th>
                     <th>GD</th>
                     <th>Pts</th>
+                    <th>xG</th>
+                    <th>xGA</th>
                     <th>Form</th>
-                    <th></th>
                 </tr>
             </thead>
             <tbody>
-                ${table.map((t, i) => `
-                    <tr class="${getPositionClass(i + 1)}">
-                        <td>${t.position || i + 1}</td>
-                        <td class="team-name">${t.name}</td>
-                        <td>${t.played || 0}</td>
-                        <td>${t.won || 0}</td>
-                        <td>${t.drawn || 0}</td>
-                        <td>${t.lost || 0}</td>
-                        <td>${t.goals_for || 0}</td>
-                        <td>${t.goals_against || 0}</td>
-                        <td class="${getGDClass(t)}">${getGD(t)}</td>
-                        <td><strong>${t.points || 0}</strong></td>
-                        <td class="form">${formatForm(t.form)}</td>
-                        <td>
-                            <button class="btn btn-small" hx-get="/api/teams/${encodeURIComponent(t.name)}" hx-target="#team-detail" hx-swap="innerHTML">
-                                Details
-                            </button>
-                        </td>
-                    </tr>
-                `).join('')}
+                ${table.map((t, i) => {
+                    const pos = t.position || i + 1;
+                    const posClass = getPositionClass(pos);
+                    const gd = (t.goals_for || 0) - (t.goals_against || 0);
+                    const gdStr = gd > 0 ? '+' + gd : String(gd);
+                    const gdClass = gd > 0 ? 'positive' : gd < 0 ? 'negative' : '';
+                    const teamSlug = encodeURIComponent(t.name);
+                    const rowId = 'row-' + teamSlug;
+                    const detailId = 'detail-' + teamSlug;
+
+                    return `
+                        <tr id="${rowId}" class="${posClass}" style="cursor:pointer;" onclick="toggleTeamDetail('${teamSlug}', this)">
+                            <td><strong>${pos}</strong></td>
+                            <td class="team-name" style="font-weight:600;">${t.name}</td>
+                            <td>${t.played || 0}</td>
+                            <td>${t.won || 0}</td>
+                            <td>${t.drawn || 0}</td>
+                            <td>${t.lost || 0}</td>
+                            <td>${t.goals_for || 0}</td>
+                            <td>${t.goals_against || 0}</td>
+                            <td class="${gdClass}">${gdStr}</td>
+                            <td><strong>${t.points || 0}</strong></td>
+                            <td class="text-muted">${t.xg != null ? parseFloat(t.xg).toFixed(1) : '-'}</td>
+                            <td class="text-muted">${t.xga != null ? parseFloat(t.xga).toFixed(1) : '-'}</td>
+                            <td>${formatFormDots(t.form)}</td>
+                        </tr>
+                        <tr id="${detailId}" style="display:none;">
+                            <td colspan="13" style="padding:0; border-bottom:1px solid var(--glass-border);">
+                                <div class="team-detail-panel" id="panel-${teamSlug}"></div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
             </tbody>
         </table>
-
-        <div id="team-detail" class="team-detail-panel"></div>
     `;
 }
 
+/* -----------------------------------------------------------------------
+   Position colour coding
+   ----------------------------------------------------------------------- */
 function getPositionClass(pos) {
-    if (pos <= 4) return 'champions-league';
-    if (pos === 5) return 'europa-league';
+    if (pos <= 4)  return 'champions-league';
+    if (pos <= 6)  return 'europa-league';
     if (pos >= 18) return 'relegation';
     return '';
 }
 
-function getGD(t) {
-    const gd = (t.goals_for || 0) - (t.goals_against || 0);
-    return gd > 0 ? '+' + gd : gd;
-}
-
-function getGDClass(t) {
-    const gd = (t.goals_for || 0) - (t.goals_against || 0);
-    if (gd > 0) return 'positive';
-    if (gd < 0) return 'negative';
-    return '';
-}
-
-function formatForm(form) {
-    if (!form) return '-';
+/* -----------------------------------------------------------------------
+   Form dots
+   ----------------------------------------------------------------------- */
+function formatFormDots(form) {
+    if (!form) return '<span class="text-muted">-</span>';
     return form.split('').map(r => {
-        const cls = r === 'W' ? 'win' : r === 'D' ? 'draw' : 'loss';
-        return `<span class="form-result ${cls}">${r}</span>`;
-    }).join('');
+        const cls = r === 'W' ? 'W' : r === 'D' ? 'D' : 'L';
+        return `<span class="form-dot ${cls}" data-tooltip="${r === 'W' ? 'Win' : r === 'D' ? 'Draw' : 'Loss'}"></span>`;
+    }).join(' ');
 }
 
-function formatTeamDetail(team) {
+/* -----------------------------------------------------------------------
+   Toggle team detail panel
+   ----------------------------------------------------------------------- */
+function toggleTeamDetail(teamSlug, row) {
+    const detailRow = document.getElementById('detail-' + teamSlug);
+    const panel     = document.getElementById('panel-' + teamSlug);
+
+    if (!detailRow) return;
+
+    // Collapse currently expanded team if different
+    if (expandedTeam && expandedTeam !== teamSlug) {
+        const prevDetail = document.getElementById('detail-' + expandedTeam);
+        if (prevDetail) prevDetail.style.display = 'none';
+    }
+
+    // Toggle
+    if (detailRow.style.display === 'none') {
+        detailRow.style.display = '';
+        expandedTeam = teamSlug;
+
+        // Populate panel if empty
+        if (!panel.innerHTML.trim()) {
+            panel.innerHTML = buildTeamDetailPanel(teamSlug, row);
+            htmx.process(panel);
+        }
+    } else {
+        detailRow.style.display = 'none';
+        expandedTeam = null;
+    }
+}
+
+function buildTeamDetailPanel(teamSlug, row) {
+    // Extract basic info from the row cells
+    const cells = row ? row.querySelectorAll('td') : [];
+    const name     = cells[1] ? cells[1].textContent.trim() : decodeURIComponent(teamSlug);
+    const position = cells[0] ? cells[0].textContent.trim() : '-';
+    const points   = cells[9] ? cells[9].textContent.trim() : '0';
+    const played   = cells[2] ? cells[2].textContent.trim() : '0';
+    const won      = cells[3] ? cells[3].textContent.trim() : '0';
+    const drawn    = cells[4] ? cells[4].textContent.trim() : '0';
+    const lost     = cells[5] ? cells[5].textContent.trim() : '0';
+
+    const squadId = 'squad-' + teamSlug;
+    const newsId  = 'news-' + teamSlug;
+
     return `
-        <div class="team-detail-content">
-            <h3>${team.name}</h3>
-            <div class="team-stats">
-                <p><strong>Position:</strong> ${team.position || '-'}</p>
-                <p><strong>Points:</strong> ${team.points || 0}</p>
-                <p><strong>Goals Scored:</strong> ${team.goals_for || 0}</p>
-                <p><strong>Goals Conceded:</strong> ${team.goals_against || 0}</p>
+        <div style="padding: var(--space-lg); background: rgba(255,255,255,0.02);">
+
+            <!-- Team overview row -->
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:var(--space-md); margin-bottom:var(--space-lg);">
+                <div>
+                    <h3 style="margin-bottom:var(--space-xs);">${name}</h3>
+                    <div style="display:flex; gap:var(--space-md); flex-wrap:wrap;">
+                        <span class="pill pill-info">Pos: ${position}</span>
+                        <span class="pill pill-success">${points} pts</span>
+                        <span class="pill">P${played} W${won} D${drawn} L${lost}</span>
+                    </div>
+                </div>
+                <div style="display:flex; gap:var(--space-sm);">
+                    <button class="btn btn-secondary btn-sm"
+                            hx-get="/api/teams/${teamSlug}/players"
+                            hx-target="#${squadId}"
+                            hx-swap="innerHTML"
+                            onclick="event.stopPropagation();">
+                        View Squad
+                    </button>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-get="/api/teams/${teamSlug}/news"
+                            hx-target="#${newsId}"
+                            hx-swap="innerHTML"
+                            onclick="event.stopPropagation();">
+                        View News
+                    </button>
+                </div>
             </div>
-            <button class="btn btn-secondary" hx-get="/api/teams/${encodeURIComponent(team.name)}/players" hx-target="#team-players" hx-swap="innerHTML">
-                View Squad
-            </button>
-            <button class="btn btn-secondary" hx-get="/api/teams/${encodeURIComponent(team.name)}/news" hx-target="#team-news" hx-swap="innerHTML">
-                View News
-            </button>
-            <div id="team-players"></div>
-            <div id="team-news"></div>
+
+            <!-- Squad section -->
+            <div id="${squadId}" style="margin-bottom:var(--space-lg);"></div>
+
+            <!-- News section -->
+            <div id="${newsId}"></div>
+        </div>
+    `;
+}
+
+/* -----------------------------------------------------------------------
+   Format squad (grouped by position)
+   ----------------------------------------------------------------------- */
+function formatSquad(players) {
+    if (!players || players.length === 0) {
+        return '<p class="text-muted text-sm" style="padding:var(--space-sm);">No squad data available.</p>';
+    }
+
+    const groups = { GK: [], DF: [], MF: [], FW: [], Other: [] };
+    const posMap = {
+        goalkeeper: 'GK', gk: 'GK',
+        defender: 'DF', df: 'DF', def: 'DF',
+        midfielder: 'MF', mf: 'MF', mid: 'MF',
+        forward: 'FW', fw: 'FW', fwd: 'FW', attacker: 'FW', striker: 'FW', att: 'FW'
+    };
+
+    players.forEach(p => {
+        const raw = (p.position || '').toLowerCase().trim();
+        const key = posMap[raw] || 'Other';
+        groups[key].push(p);
+    });
+
+    const groupLabels = { GK: 'Goalkeepers', DF: 'Defenders', MF: 'Midfielders', FW: 'Forwards', Other: 'Other' };
+    let html = '<h4 style="margin-bottom:var(--space-md);">Squad</h4>';
+    html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:var(--space-md);">';
+
+    for (const [key, label] of Object.entries(groupLabels)) {
+        const list = groups[key];
+        if (list.length === 0) continue;
+
+        html += `
+            <div>
+                <h6 style="margin-bottom:var(--space-sm);">${label}</h6>
+                <ul style="display:flex; flex-direction:column; gap:var(--space-xs);">
+                    ${list.map(p => `
+                        <li style="display:flex; justify-content:space-between; align-items:center; padding:var(--space-xs) var(--space-sm); background:rgba(255,255,255,0.03); border-radius:var(--border-radius-sm);">
+                            <span class="text-sm" style="font-weight:500;">
+                                ${p.shirt_number ? '<span class="text-mono text-muted" style="margin-right:var(--space-xs);">#' + p.shirt_number + '</span>' : ''}
+                                ${p.name}
+                            </span>
+                            ${p.nationality ? '<span class="text-xs text-muted">' + p.nationality + '</span>' : ''}
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+/* -----------------------------------------------------------------------
+   Format news
+   ----------------------------------------------------------------------- */
+function formatNews(articles) {
+    if (!articles || articles.length === 0) {
+        return '<p class="text-muted text-sm" style="padding:var(--space-sm);">No recent news available.</p>';
+    }
+
+    return `
+        <h4 style="margin-bottom:var(--space-md);">Recent News</h4>
+        <div style="display:flex; flex-direction:column; gap:var(--space-sm);">
+            ${articles.map(a => {
+                const impact = (a.impact || '').toLowerCase();
+                const impactClass = impact === 'high' ? 'impact-high' : impact === 'medium' ? 'impact-medium' : 'impact-low';
+                return `
+                    <div class="news-item-card ${impactClass}">
+                        <span class="news-title">
+                            ${a.url ? '<a href="' + a.url + '" target="_blank" rel="noopener">' + (a.title || 'Untitled') + '</a>' : (a.title || 'Untitled')}
+                        </span>
+                        <div class="news-footer">
+                            ${a.source ? '<span class="news-source">' + a.source + '</span>' : ''}
+                            ${a.published ? '<span class="text-xs text-muted">' + new Date(a.published).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + '</span>' : ''}
+                            ${impact ? '<span class="pill pill-' + (impact === 'high' ? 'danger' : impact === 'medium' ? 'warning' : 'success') + '">' + impact + ' impact</span>' : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
 }

@@ -123,7 +123,7 @@ class OllamaClient:
                     options={
                         "temperature": temperature,
                         "seed": config.llm.seed,
-                        "num_predict": 8192,
+                        "num_predict": 16384,
                     }
                 )
 

@@ -3,44 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Premier League Betting Analysis{% endblock %}</title>
+    <title>PL Betting AI - {% block title %}Dashboard{% endblock %}</title>
 
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <!-- CSS -->
     <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/animations.css">
 
-    {% block head %}{% endblock %}
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
-<body hx-ext="ws" ws-connect="/ws">
+<body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="/">PL Betting AI</a>
+            <span class="brand-icon">⚽</span>
+            <span class="brand-text">PL Betting AI</span>
         </div>
-        <ul class="nav-links">
-            <li><a href="/" hx-get="/" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Dashboard</a></li>
-            <li><a href="/fixtures" hx-get="/fixtures" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Fixtures</a></li>
-            <li><a href="/predictions" hx-get="/predictions" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Predictions</a></li>
-            <li><a href="/teams" hx-get="/teams" hx-target="#main-content" hx-push-url="true" hx-swap="innerHTML">Teams</a></li>
-        </ul>
+        <div class="nav-links">
+            <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+                <i data-lucide="layout-dashboard"></i> Dashboard
+            </a>
+            <a href="/fixtures" class="nav-link {% if request.url.path == '/fixtures' %}active{% endif %}">
+                <i data-lucide="calendar"></i> Fixtures
+            </a>
+            <a href="/predictions" class="nav-link {% if request.url.path == '/predictions' %}active{% endif %}">
+                <i data-lucide="brain"></i> Predictions
+            </a>
+            <a href="/teams" class="nav-link {% if request.url.path == '/teams' %}active{% endif %}">
+                <i data-lucide="shield"></i> Teams
+            </a>
+            <a href="/intelligence" class="nav-link {% if request.url.path == '/intelligence' %}active{% endif %}">
+                <i data-lucide="sparkles"></i> Intelligence
+            </a>
+            <a href="/tracker" class="nav-link {% if request.url.path == '/tracker' %}active{% endif %}">
+                <i data-lucide="wallet"></i> Bet Tracker
+            </a>
+        </div>
         <div class="nav-status">
-            <span id="connection-status" class="status-dot"></span>
-            <span id="last-update">Connecting...</span>
+            <span class="connection-dot" id="connection-dot"></span>
+            <span class="connection-text" id="connection-text">Connecting...</span>
         </div>
     </nav>
 
-    <main id="main-content" class="container">
+    <main id="main-content">
         {% block content %}{% endblock %}
     </main>
 
-    <footer>
-        <p>Premier League Betting Analysis | Powered by Ollama AI</p>
-        <p>Last update: <span id="global-last-update">-</span></p>
+    <footer class="footer">
+        <span>Premier League Betting AI v2.0</span>
+        <span>Powered by Gemma 3 + Ollama</span>
+        <span id="last-update">Last update: --</span>
     </footer>
 
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <!-- JS Modules -->
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/components.js"></script>
+    <script src="/static/js/formatters.js"></script>
     <script src="/static/js/app.js"></script>
+
+    <!-- Initialize Lucide icons -->
+    <script>document.addEventListener('DOMContentLoaded', () => { if(window.lucide) lucide.createIcons(); });</script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

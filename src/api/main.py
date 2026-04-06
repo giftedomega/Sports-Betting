@@ -15,10 +15,12 @@ from src.utils.config import get_config
 from src.utils.logger import init_logging, get_logger
 from src.database.models import create_tables
 from src.api.routes import fixtures, teams, players, predictions, news, status, formations, h2h
+from src.api.routes import intelligence, odds, tracker
 
 # Initialize logging
 init_logging()
 logger = get_logger(__name__)
+
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -62,6 +64,10 @@ async def lifespan(app: FastAPI):
     create_tables(str(db_path))
     logger.info(f"Database initialized at {db_path}")
 
+    # Run migrations for new columns
+    from src.database.migrations import run_migrations
+    run_migrations(str(db_path))
+
     # Store manager in app state
     app.state.ws_manager = manager
 
@@ -83,7 +89,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Football Betting Analysis",
     description="AI-powered Premier League betting analysis",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -114,7 +120,12 @@ app.include_router(news.router, prefix="/api/news", tags=["news"])
 app.include_router(formations.router, prefix="/api/formations", tags=["formations"])
 app.include_router(h2h.router, prefix="/api/h2h", tags=["head-to-head"])
 app.include_router(status.router, prefix="/api", tags=["status"])
+app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
+app.include_router(odds.router, prefix="/api/odds", tags=["odds"])
+app.include_router(tracker.router, prefix="/api/tracker", tags=["tracker"])
 
+
+# ── HTML Pages ─────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -149,15 +160,25 @@ async def match_page(request: Request, fixture_id: int):
     })
 
 
+@app.get("/intelligence", response_class=HTMLResponse)
+async def intelligence_page(request: Request):
+    """Render intelligence page."""
+    return templates.TemplateResponse("intelligence.html", {"request": request})
+
+
+@app.get("/tracker", response_class=HTMLResponse)
+async def tracker_page(request: Request):
+    """Render bet tracker page."""
+    return templates.TemplateResponse("tracker.html", {"request": request})
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates."""
     await manager.connect(websocket)
     try:
         while True:
-            # Keep connection alive and handle incoming messages
             data = await websocket.receive_text()
-            # Echo back for now
             await websocket.send_json({"type": "ack", "data": data})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -169,4 +190,4 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "football-betting-analysis"}
+    return {"status": "healthy", "service": "football-betting-analysis", "version": "2.0.0"}

@@ -2,142 +2,727 @@
 
 {% block title %}Match Analysis - Premier League Betting Analysis{% endblock %}
 
-{% block content %}
-<div class="match-page">
-    <header class="page-header">
-        <a href="/fixtures" class="back-link">&larr; Back to Fixtures</a>
-        <h1>Match Analysis</h1>
-    </header>
+{% block head %}
+<link rel="stylesheet" href="/static/css/components.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
 
-    <div class="match-container" id="match-container" hx-get="/api/fixtures/{{ fixture_id }}/context" hx-trigger="load" hx-swap="innerHTML">
-        <div class="loading">Loading match data...</div>
+{% block content %}
+<div class="match-page" id="match-page" data-fixture-id="{{ fixture_id }}">
+
+    <!-- Back link -->
+    <div style="margin-bottom: var(--space-md);">
+        <a href="/fixtures" class="btn btn-secondary btn-sm">&larr; Back to Fixtures</a>
     </div>
 
-    <!-- Pitch Formation Display -->
-    <section class="card">
-        <h2>Expected Formations</h2>
-        <div id="pitch-container" class="pitch-container">
-            <div class="loading">Loading formations...</div>
+    <!-- ================================================================
+         MATCH HEADER (Hero)
+         ================================================================ -->
+    <div class="card" id="match-header" style="text-align: center; padding: var(--space-2xl) var(--space-xl);">
+        <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-xl); flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 140px; text-align: center;">
+                <h2 id="home-team-name" style="font-size: 1.75rem; margin-bottom: 0;">-</h2>
+                <span class="text-muted text-sm">Home</span>
+            </div>
+            <div style="flex-shrink: 0; text-align: center;">
+                <span class="stat-number" style="color: var(--text-secondary); font-size: 1.5rem;">VS</span>
+            </div>
+            <div style="flex: 1; min-width: 140px; text-align: center;">
+                <h2 id="away-team-name" style="font-size: 1.75rem; margin-bottom: 0;">-</h2>
+                <span class="text-muted text-sm">Away</span>
+            </div>
         </div>
-    </section>
+        <div id="match-meta" style="margin-top: var(--space-lg); display: flex; align-items: center; justify-content: center; gap: var(--space-lg); flex-wrap: wrap;">
+            <span class="pill pill-info" id="match-date-pill">Loading...</span>
+            <span class="pill" id="match-venue-pill" style="display: none;"></span>
+            <span class="pill" id="match-gameweek-pill" style="display: none;"></span>
+        </div>
+        <div id="weather-container" style="margin-top: var(--space-md); display: flex; justify-content: center;"></div>
+    </div>
 
-    <!-- AI Analysis -->
-    <section class="card">
-        <h2>AI Analysis</h2>
-        <div id="analysis-container">
-            <button class="btn btn-primary" hx-post="/api/predictions/match?fixture_id={{ fixture_id }}" hx-target="#analysis-result" hx-swap="innerHTML">
-                Generate AI Prediction
-            </button>
-            <div id="analysis-result"></div>
+    <!-- ================================================================
+         TAB NAVIGATION
+         ================================================================ -->
+    <div id="match-tabs-container">
+        <div class="tabs" data-tabs>
+            <button class="tab active" data-tab="tab-overview">Overview</button>
+            <button class="tab" data-tab="tab-stats">Stats</button>
+            <button class="tab" data-tab="tab-h2h">H2H</button>
+            <button class="tab" data-tab="tab-formations">Formations</button>
+            <button class="tab" data-tab="tab-betting">Betting</button>
         </div>
-    </section>
+
+        <!-- ==============================================================
+             TAB: OVERVIEW
+             ============================================================== -->
+        <div class="tab-panel active" id="tab-overview">
+
+            <!-- AI Prediction Card (large, centered) -->
+            <div class="card" id="prediction-card" style="text-align: center; max-width: 700px; margin: 0 auto var(--space-xl);">
+                <h2>AI Prediction</h2>
+                <div id="prediction-content">
+                    <div class="empty-state-component">
+                        <div class="empty-icon">&#129302;</div>
+                        <h3>No Prediction Yet</h3>
+                        <p>Click below to generate an AI-powered match prediction.</p>
+                        <button class="btn btn-primary" id="btn-generate-prediction">Generate Prediction</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Factors -->
+            <div id="key-factors-container" style="display: none;">
+                <h4 style="margin-bottom: var(--space-md);">Key Factors</h4>
+                <div class="grid-auto" id="key-factors-grid"></div>
+            </div>
+        </div>
+
+        <!-- ==============================================================
+             TAB: STATS
+             ============================================================== -->
+        <div class="tab-panel" id="tab-stats">
+            <div class="card">
+                <h2>Head-to-Head Comparison</h2>
+                <div id="stats-comparison" style="margin-bottom: var(--space-xl);">
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+            </div>
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <h2>Radar Comparison</h2>
+                <canvas id="radar-chart" width="500" height="500"></canvas>
+            </div>
+        </div>
+
+        <!-- ==============================================================
+             TAB: H2H
+             ============================================================== -->
+        <div class="tab-panel" id="tab-h2h">
+            <div class="card">
+                <h2>Head-to-Head Record</h2>
+                <div id="h2h-summary" style="margin-bottom: var(--space-xl);">
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Previous Meetings</h2>
+                <div id="h2h-meetings">
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>H2H Statistics</h2>
+                <div id="h2h-stats" class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==============================================================
+             TAB: FORMATIONS
+             ============================================================== -->
+        <div class="tab-panel" id="tab-formations">
+            <div class="card" style="text-align: center;">
+                <h2>Expected Formations</h2>
+                <div id="pitch-container" style="max-width: 700px; margin: 0 auto; min-height: 400px;">
+                    <div class="skeleton skeleton-card" style="height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==============================================================
+             TAB: BETTING
+             ============================================================== -->
+        <div class="tab-panel" id="tab-betting">
+
+            <!-- Odds Display -->
+            <div class="card">
+                <h2>Match Odds</h2>
+                <div id="odds-display">
+                    <div class="skeleton skeleton-card"></div>
+                </div>
+            </div>
+
+            <!-- Recommended Bets -->
+            <div class="card" id="recommended-bets-card" style="display: none;">
+                <h2>Recommended Bets</h2>
+                <div id="recommended-bets-container" class="grid-auto"></div>
+            </div>
+
+            <!-- Value Bets -->
+            <div class="card" id="value-bets-card" style="display: none;">
+                <h2>Value Bets</h2>
+                <div id="value-bets-container" class="grid-auto"></div>
+            </div>
+
+            <!-- Risk Assessment -->
+            <div class="card" id="risk-assessment-card" style="display: none;">
+                <h2>Risk Assessment</h2>
+                <div id="risk-assessment-container"></div>
+            </div>
+        </div>
+
+    </div><!-- end #match-tabs-container -->
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'analysis-result') {
-        try {
-            const data = JSON.parse(event.detail.xhr.responseText);
-            event.detail.target.innerHTML = formatAnalysisResult(data);
-        } catch (e) { }
+(function() {
+    // =====================================================================
+    //  State
+    // =====================================================================
+    const fixtureId = document.getElementById('match-page').dataset.fixtureId;
+    let matchData = null;
+    let predictionData = null;
+    let homeTeamData = null;
+    let awayTeamData = null;
+    let radarChart = null;
+
+    // =====================================================================
+    //  Init tabs
+    // =====================================================================
+    Components.initTabs('#match-tabs-container');
+
+    // =====================================================================
+    //  Load match data on page load
+    // =====================================================================
+    loadMatchData();
+
+    // =====================================================================
+    //  Generate prediction button
+    // =====================================================================
+    document.getElementById('btn-generate-prediction').addEventListener('click', function() {
+        this.disabled = true;
+        this.textContent = 'Analyzing...';
+        generatePrediction();
+    });
+
+    // =====================================================================
+    //  Data Loaders
+    // =====================================================================
+
+    function loadMatchData() {
+        // Fetch fixture context
+        fetch(`/api/fixtures/${fixtureId}/context`)
+            .then(r => r.json())
+            .then(data => {
+                matchData = data;
+                renderMatchHeader(data);
+                renderOdds(data);
+                loadTeamData(data);
+                loadH2H(data);
+                loadFormations(data);
+                // Auto-generate prediction if not available
+                if (data.prediction) {
+                    predictionData = data.prediction;
+                    renderPrediction(data.prediction);
+                    renderBettingSection(data.prediction);
+                }
+            })
+            .catch(err => {
+                console.error('Failed to load match data:', err);
+                document.getElementById('match-date-pill').textContent = 'Failed to load match';
+            });
     }
-});
 
-function formatAnalysisResult(data) {
-    if (data.error) {
-        return `<div class="error">${data.error}</div>`;
+    function loadTeamData(data) {
+        const homeTeam = data.home_team || data.fixture?.home_team;
+        const awayTeam = data.away_team || data.fixture?.away_team;
+        if (!homeTeam || !awayTeam) return;
+
+        Promise.all([
+            fetch(`/api/teams/${encodeURIComponent(homeTeam)}`).then(r => r.json()).catch(() => null),
+            fetch(`/api/teams/${encodeURIComponent(awayTeam)}`).then(r => r.json()).catch(() => null)
+        ]).then(([home, away]) => {
+            homeTeamData = home;
+            awayTeamData = away;
+            renderStatsComparison(home, away);
+            renderRadarChart(home, away);
+        });
     }
 
-    return `
-        <div class="analysis-result">
-            <div class="prediction-main">
-                <div class="outcome-display ${data.predicted_outcome}">
-                    <span class="label">Predicted Outcome</span>
-                    <span class="value">${formatOutcome(data.predicted_outcome)}</span>
-                    <span class="confidence">${data.confidence}% confidence</span>
-                </div>
+    function loadH2H(data) {
+        const homeTeam = data.home_team || data.fixture?.home_team;
+        const awayTeam = data.away_team || data.fixture?.away_team;
+        if (!homeTeam || !awayTeam) return;
 
-                ${data.predicted_score ? `
-                    <div class="score-prediction">
-                        <span>${data.predicted_score.home || 0}</span>
-                        <span>-</span>
-                        <span>${data.predicted_score.away || 0}</span>
-                    </div>
-                ` : ''}
+        fetch(`/api/h2h?home=${encodeURIComponent(homeTeam)}&away=${encodeURIComponent(awayTeam)}`)
+            .then(r => r.json())
+            .then(h2h => renderH2H(h2h, homeTeam, awayTeam))
+            .catch(() => {
+                document.getElementById('h2h-summary').innerHTML =
+                    '<p class="text-muted">Head-to-head data not available.</p>';
+            });
+    }
+
+    function loadFormations(data) {
+        const homeTeam = data.home_team || data.fixture?.home_team;
+        const awayTeam = data.away_team || data.fixture?.away_team;
+        if (!homeTeam || !awayTeam) return;
+
+        fetch(`/api/formations/${encodeURIComponent(homeTeam)}/${encodeURIComponent(awayTeam)}/svg`)
+            .then(r => {
+                if (!r.ok) throw new Error('No formation data');
+                return r.text();
+            })
+            .then(svg => {
+                document.getElementById('pitch-container').innerHTML = svg;
+            })
+            .catch(() => {
+                document.getElementById('pitch-container').innerHTML = `
+                    <div class="empty-state-component">
+                        <div class="empty-icon">&#9917;</div>
+                        <h3>Formation Unavailable</h3>
+                        <p>Expected formation data is not yet available for this match.</p>
+                    </div>`;
+            });
+    }
+
+    function generatePrediction() {
+        const homeTeam = matchData?.home_team || matchData?.fixture?.home_team;
+        const awayTeam = matchData?.away_team || matchData?.fixture?.away_team;
+
+        let url = `/api/predictions/match?fixture_id=${fixtureId}`;
+        if (homeTeam && awayTeam) {
+            url += `&home_team=${encodeURIComponent(homeTeam)}&away_team=${encodeURIComponent(awayTeam)}`;
+        }
+
+        fetch(url, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('prediction-content').innerHTML =
+                        `<p class="text-danger">${data.error}</p>
+                         <button class="btn btn-primary" id="btn-generate-prediction" onclick="location.reload()">Retry</button>`;
+                    return;
+                }
+                predictionData = data;
+                renderPrediction(data);
+                renderBettingSection(data);
+            })
+            .catch(err => {
+                document.getElementById('prediction-content').innerHTML =
+                    `<p class="text-danger">Failed to generate prediction. Please try again.</p>
+                     <button class="btn btn-primary" onclick="location.reload()">Retry</button>`;
+            });
+    }
+
+    // =====================================================================
+    //  Renderers
+    // =====================================================================
+
+    function renderMatchHeader(data) {
+        const fixture = data.fixture || data;
+        const homeTeam = data.home_team || fixture.home_team || '-';
+        const awayTeam = data.away_team || fixture.away_team || '-';
+
+        document.getElementById('home-team-name').textContent = homeTeam;
+        document.getElementById('away-team-name').textContent = awayTeam;
+
+        // Date pill
+        const matchDate = fixture.match_date || data.match_date;
+        document.getElementById('match-date-pill').textContent = Components.formatDate(matchDate);
+
+        // Venue pill
+        const venue = fixture.venue || data.venue;
+        if (venue) {
+            const venuePill = document.getElementById('match-venue-pill');
+            venuePill.textContent = venue;
+            venuePill.style.display = '';
+        }
+
+        // Gameweek pill
+        const gw = fixture.gameweek || fixture.round || data.gameweek;
+        if (gw) {
+            const gwPill = document.getElementById('match-gameweek-pill');
+            gwPill.textContent = 'Gameweek ' + gw;
+            gwPill.style.display = '';
+        }
+
+        // Weather widget
+        const weather = data.weather || fixture.weather;
+        if (weather) {
+            document.getElementById('weather-container').innerHTML = Components.createWeatherWidget(weather);
+        }
+    }
+
+    function renderPrediction(p) {
+        if (!p) return;
+
+        const outcomeClass = p.predicted_outcome === 'home_win' ? 'home'
+            : p.predicted_outcome === 'away_win' ? 'away' : 'draw';
+
+        const confidenceLevel = p.confidence >= 70 ? 'gauge-success'
+            : p.confidence >= 50 ? 'gauge-warning' : 'gauge-danger';
+
+        const riskColors = { low: 'pill-success', medium: 'pill-warning', high: 'pill-danger' };
+        const riskClass = riskColors[p.risk_level] || 'pill-warning';
+
+        const scoreHtml = p.predicted_score
+            ? `<div class="stat-number" style="margin: var(--space-md) 0;">
+                   ${p.predicted_score.home || 0} - ${p.predicted_score.away || 0}
+               </div>`
+            : '';
+
+        document.getElementById('prediction-content').innerHTML = `
+            <div style="margin-bottom: var(--space-lg);">
+                <span class="prediction-outcome-badge ${outcomeClass}" style="font-size: 1rem; padding: 0.5rem 1.25rem;">
+                    ${Components.formatOutcome(p.predicted_outcome)}
+                </span>
             </div>
-
-            <div class="analysis-sections">
-                <div class="section">
-                    <h4>Key Factors</h4>
-                    <ul>
-                        ${(data.key_factors || []).map(f => `<li>${f}</li>`).join('')}
-                    </ul>
+            ${scoreHtml}
+            <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-lg); margin: var(--space-lg) 0; flex-wrap: wrap;">
+                <div>
+                    <div class="gauge gauge-lg ${confidenceLevel}" style="--gauge-value: ${p.confidence || 0}; margin: 0 auto;">
+                        <span class="gauge-label">${p.confidence || 0}%</span>
+                    </div>
+                    <div class="text-muted text-sm" style="margin-top: var(--space-xs);">Confidence</div>
                 </div>
+                <div>
+                    <span class="pill ${riskClass}" style="font-size: 0.875rem; padding: 0.375rem 1rem;">
+                        ${(p.risk_level || 'medium').toUpperCase()} RISK
+                    </span>
+                </div>
+            </div>
+            ${p.summary ? `<p style="max-width: 500px; margin: var(--space-md) auto 0; line-height: 1.7;">${p.summary}</p>` : ''}
+        `;
 
-                ${data.recommended_bets && data.recommended_bets.length > 0 ? `
-                    <div class="section">
-                        <h4>Recommended Bets</h4>
-                        <div class="bets-list">
-                            ${data.recommended_bets.map(b => `
-                                <div class="bet-recommendation">
-                                    <div class="bet-header">
-                                        <span class="market">${b.market}</span>
-                                        <span class="selection">${b.selection}</span>
-                                    </div>
-                                    <div class="bet-meta">
-                                        <span class="confidence">${b.confidence}% confidence</span>
-                                        <span class="value-indicator ${b.odds_value}">${b.odds_value} value</span>
-                                    </div>
-                                    <p class="reasoning">${b.reasoning}</p>
-                                </div>
-                            `).join('')}
+        // Key factors
+        if (p.key_factors && p.key_factors.length > 0) {
+            const container = document.getElementById('key-factors-container');
+            container.style.display = '';
+            document.getElementById('key-factors-grid').innerHTML = p.key_factors.map(factor => `
+                <div class="card" style="margin-bottom: 0;">
+                    <p style="margin: 0; font-size: 0.875rem;">${factor}</p>
+                </div>
+            `).join('');
+        }
+    }
+
+    function renderOdds(data) {
+        const fixture = data.fixture || data;
+        const odds = fixture.odds || data.odds;
+        if (!odds) {
+            document.getElementById('odds-display').innerHTML =
+                '<p class="text-muted">Odds data not available for this match.</p>';
+            return;
+        }
+        document.getElementById('odds-display').innerHTML = Formatters.formatOdds(fixture);
+    }
+
+    function renderStatsComparison(home, away) {
+        if (!home && !away) {
+            document.getElementById('stats-comparison').innerHTML =
+                '<p class="text-muted">Team statistics not available.</p>';
+            return;
+        }
+
+        const stats = [
+            { label: 'Goals Scored', homeVal: home?.goals_for || 0, awayVal: away?.goals_for || 0 },
+            { label: 'Goals Conceded', homeVal: home?.goals_against || 0, awayVal: away?.goals_against || 0 },
+            { label: 'Possession %', homeVal: home?.avg_possession || 0, awayVal: away?.avg_possession || 0 },
+            { label: 'Shots / Game', homeVal: home?.avg_shots || 0, awayVal: away?.avg_shots || 0 },
+            { label: 'xG', homeVal: home?.xg || 0, awayVal: away?.xg || 0 },
+            { label: 'xGA', homeVal: home?.xga || 0, awayVal: away?.xga || 0 },
+            { label: 'Clean Sheets', homeVal: home?.clean_sheets || 0, awayVal: away?.clean_sheets || 0 }
+        ];
+
+        const homeName = home?.name || '-';
+        const awayName = away?.name || '-';
+
+        document.getElementById('stats-comparison').innerHTML = stats.map(s => {
+            const total = (s.homeVal + s.awayVal) || 1;
+            const homePct = Math.round((s.homeVal / total) * 100);
+            const awayPct = 100 - homePct;
+            return `
+                <div class="comparison-bar">
+                    <span class="team-label">${homeName}</span>
+                    <div class="bar-container">
+                        <div class="bar-left" style="width: ${homePct}%">${s.homeVal}</div>
+                        <div class="bar-right" style="width: ${awayPct}%">${s.awayVal}</div>
+                    </div>
+                    <span class="stat-name">${s.label}</span>
+                    <div class="bar-container">
+                        <div class="bar-left" style="width: ${awayPct}%">${s.awayVal}</div>
+                        <div class="bar-right" style="width: ${homePct}%">${s.homeVal}</div>
+                    </div>
+                    <span class="team-label">${awayName}</span>
+                </div>`;
+        }).join('');
+    }
+
+    function renderRadarChart(home, away) {
+        const canvas = document.getElementById('radar-chart');
+        if (!canvas || !window.Chart) return;
+
+        const labels = ['Attack', 'Defence', 'Possession', 'Form', 'xG', 'Clean Sheets'];
+
+        // Normalize values to 0-100 scale
+        const normalize = (val, max) => max > 0 ? Math.min(Math.round((val / max) * 100), 100) : 0;
+        const maxGoals = Math.max(home?.goals_for || 1, away?.goals_for || 1, 1);
+        const maxCS = Math.max(home?.clean_sheets || 1, away?.clean_sheets || 1, 1);
+        const maxXG = Math.max(home?.xg || 1, away?.xg || 1, 1);
+
+        const homeStats = [
+            normalize(home?.goals_for || 0, maxGoals),
+            normalize(maxGoals - (home?.goals_against || 0), maxGoals),
+            home?.avg_possession || 50,
+            (home?.won || 0) / Math.max(home?.played || 1, 1) * 100,
+            normalize(home?.xg || 0, maxXG),
+            normalize(home?.clean_sheets || 0, maxCS)
+        ];
+
+        const awayStats = [
+            normalize(away?.goals_for || 0, maxGoals),
+            normalize(maxGoals - (away?.goals_against || 0), maxGoals),
+            away?.avg_possession || 50,
+            (away?.won || 0) / Math.max(away?.played || 1, 1) * 100,
+            normalize(away?.xg || 0, maxXG),
+            normalize(away?.clean_sheets || 0, maxCS)
+        ];
+
+        if (radarChart) radarChart.destroy();
+
+        radarChart = new Chart(canvas, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: home?.name || 'Home',
+                        data: homeStats,
+                        borderColor: '#00ff85',
+                        backgroundColor: 'rgba(0, 255, 133, 0.15)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#00ff85',
+                        pointRadius: 4
+                    },
+                    {
+                        label: away?.name || 'Away',
+                        data: awayStats,
+                        borderColor: '#e90052',
+                        backgroundColor: 'rgba(233, 0, 82, 0.15)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#e90052',
+                        pointRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            stepSize: 20,
+                            color: 'rgba(136, 146, 176, 0.5)',
+                            backdropColor: 'transparent',
+                            font: { size: 10 }
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.06)'
+                        },
+                        angleLines: {
+                            color: 'rgba(255, 255, 255, 0.06)'
+                        },
+                        pointLabels: {
+                            color: '#8892b0',
+                            font: { size: 12, weight: 600 }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#ffffff',
+                            font: { size: 12 },
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderH2H(h2h, homeTeam, awayTeam) {
+        // Summary stats (wins / draws / wins)
+        const homeWins = h2h.home_wins || h2h.team_a_wins || 0;
+        const awayWins = h2h.away_wins || h2h.team_b_wins || 0;
+        const draws = h2h.draws || 0;
+        const totalMeetings = h2h.total || (homeWins + awayWins + draws) || 0;
+
+        document.getElementById('h2h-summary').innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-xl); flex-wrap: wrap; text-align: center;">
+                <div>
+                    <div class="stat-number" style="color: var(--success);">${homeWins}</div>
+                    <div class="text-muted text-sm">${homeTeam} Wins</div>
+                </div>
+                <div>
+                    <div class="stat-number" style="color: var(--warning);">${draws}</div>
+                    <div class="text-muted text-sm">Draws</div>
+                </div>
+                <div>
+                    <div class="stat-number" style="color: var(--danger);">${awayWins}</div>
+                    <div class="text-muted text-sm">${awayTeam} Wins</div>
+                </div>
+            </div>
+            <div style="margin-top: var(--space-md); text-align: center;">
+                <span class="text-muted text-sm">${totalMeetings} meetings</span>
+            </div>`;
+
+        // Past meetings list
+        const meetings = h2h.meetings || h2h.matches || [];
+        if (meetings.length > 0) {
+            document.getElementById('h2h-meetings').innerHTML = meetings.map(m => `
+                <div class="fixture-card-v2" style="margin-bottom: var(--space-sm); padding: var(--space-md);">
+                    <div class="fixture-main" style="margin-bottom: 0;">
+                        <div class="team-info">
+                            <span class="team-name">${m.home_team || homeTeam}</span>
+                        </div>
+                        <div class="fixture-center">
+                            <span class="fixture-score">${m.home_score != null ? m.home_score : '-'} - ${m.away_score != null ? m.away_score : '-'}</span>
+                            <span class="fixture-time">${Components.formatDate(m.date || m.match_date)}</span>
+                        </div>
+                        <div class="team-info">
+                            <span class="team-name">${m.away_team || awayTeam}</span>
                         </div>
                     </div>
-                ` : ''}
-
-                ${data.value_bets && data.value_bets.length > 0 ? `
-                    <div class="section">
-                        <h4>Value Bets</h4>
-                        <div class="value-bets-list">
-                            ${data.value_bets.map(b => `
-                                <div class="value-bet">
-                                    <span class="market">${b.market}: ${b.selection}</span>
-                                    <span class="min-odds">Min odds: ${b.min_odds}</span>
-                                    <p>${b.reasoning}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
-
-                <div class="section">
-                    <h4>Risk Assessment</h4>
-                    <div class="risk-display ${data.risk_level}">
-                        <span class="risk-level">${(data.risk_level || 'medium').toUpperCase()}</span>
-                    </div>
-                    <ul class="risk-factors">
-                        ${(data.risk_factors || []).map(r => `<li>${r}</li>`).join('')}
-                    </ul>
                 </div>
-            </div>
+            `).join('');
+        } else {
+            document.getElementById('h2h-meetings').innerHTML =
+                '<p class="text-muted">No previous meeting records available.</p>';
+        }
 
-            <div class="summary-section">
-                <h4>Summary</h4>
-                <p>${data.summary || 'No summary available'}</p>
-            </div>
-        </div>
-    `;
-}
+        // H2H aggregate stats
+        const avgGoals = h2h.avg_goals || h2h.average_goals || '-';
+        const bttsPercent = h2h.btts_percentage != null ? h2h.btts_percentage + '%' : (h2h.btts_pct != null ? h2h.btts_pct + '%' : '-');
+        const over25Percent = h2h.over_2_5_percentage != null ? h2h.over_2_5_percentage + '%' : (h2h.over25_pct != null ? h2h.over25_pct + '%' : '-');
 
-function formatOutcome(outcome) {
-    const map = {
-        'home_win': 'Home Win',
-        'away_win': 'Away Win',
-        'draw': 'Draw'
+        document.getElementById('h2h-stats').innerHTML = `
+            <div class="card" style="text-align: center; margin-bottom: 0;">
+                <div class="stat-number-sm">${typeof avgGoals === 'number' ? avgGoals.toFixed(1) : avgGoals}</div>
+                <div class="text-muted text-sm">Avg Goals</div>
+            </div>
+            <div class="card" style="text-align: center; margin-bottom: 0;">
+                <div class="stat-number-sm">${bttsPercent}</div>
+                <div class="text-muted text-sm">BTTS %</div>
+            </div>
+            <div class="card" style="text-align: center; margin-bottom: 0;">
+                <div class="stat-number-sm">${over25Percent}</div>
+                <div class="text-muted text-sm">Over 2.5 %</div>
+            </div>`;
+    }
+
+    function renderBettingSection(p) {
+        if (!p) return;
+
+        // Recommended bets
+        if (p.recommended_bets && p.recommended_bets.length > 0) {
+            const card = document.getElementById('recommended-bets-card');
+            card.style.display = '';
+            document.getElementById('recommended-bets-container').innerHTML = p.recommended_bets.map(b => {
+                const confLevel = b.confidence >= 70 ? 'gauge-success' : b.confidence >= 50 ? 'gauge-warning' : 'gauge-danger';
+                return `
+                    <div class="prediction-card-v2 risk-${b.risk || 'medium'}" style="margin-bottom: 0;">
+                        <div class="prediction-top">
+                            <div>
+                                <h4 style="margin-bottom: var(--space-xs);">${b.market || '-'}</h4>
+                                <span class="pill pill-info">${b.selection || '-'}</span>
+                            </div>
+                            <div class="gauge gauge-sm ${confLevel}" style="--gauge-value: ${b.confidence || 0}">
+                                <span class="gauge-label">${b.confidence || 0}%</span>
+                            </div>
+                        </div>
+                        ${b.odds_value ? `<span class="pill pill-${b.odds_value === 'good' || b.odds_value === 'high' ? 'success' : b.odds_value === 'fair' ? 'warning' : 'info'}" style="margin: var(--space-sm) 0;">${b.odds_value} value</span>` : ''}
+                        ${b.reasoning ? `<p class="prediction-summary">${b.reasoning}</p>` : ''}
+                        <button class="btn btn-secondary btn-sm" style="margin-top: var(--space-sm);"
+                                onclick="MatchPage.trackBet('${(b.market || '').replace(/'/g, "\\'")}', '${(b.selection || '').replace(/'/g, "\\'")}', ${b.odds || 0})">
+                            Track This Bet
+                        </button>
+                    </div>`;
+            }).join('');
+        }
+
+        // Value bets
+        if (p.value_bets && p.value_bets.length > 0) {
+            const card = document.getElementById('value-bets-card');
+            card.style.display = '';
+            document.getElementById('value-bets-container').innerHTML = p.value_bets.map(b => `
+                <div class="card" style="margin-bottom: 0; border-left: 4px solid var(--success);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+                        <h4>${b.market}: ${b.selection}</h4>
+                        ${b.min_odds ? `<span class="pill pill-success">Min Odds: ${b.min_odds}</span>` : ''}
+                    </div>
+                    ${b.reasoning ? `<p class="text-muted text-sm">${b.reasoning}</p>` : ''}
+                    <button class="btn btn-secondary btn-sm" style="margin-top: var(--space-sm);"
+                            onclick="MatchPage.trackBet('${(b.market || '').replace(/'/g, "\\'")}', '${(b.selection || '').replace(/'/g, "\\'")}', ${b.min_odds || 0})">
+                        Track This Bet
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Risk assessment
+        if (p.risk_level || (p.risk_factors && p.risk_factors.length > 0)) {
+            const card = document.getElementById('risk-assessment-card');
+            card.style.display = '';
+            const riskColors = { low: 'success', medium: 'warning', high: 'danger' };
+            const riskColor = riskColors[p.risk_level] || 'warning';
+
+            document.getElementById('risk-assessment-container').innerHTML = `
+                <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg);">
+                    <span class="badge badge-${riskColor}" style="font-size: 1rem; padding: 0.5rem 1rem;">
+                        ${(p.risk_level || 'MEDIUM').toUpperCase()} RISK
+                    </span>
+                </div>
+                ${p.risk_factors && p.risk_factors.length > 0 ? `
+                    <ul style="list-style: disc; padding-left: var(--space-lg);">
+                        ${p.risk_factors.map(r => `<li style="margin-bottom: var(--space-xs); color: var(--text-secondary);">${r}</li>`).join('')}
+                    </ul>
+                ` : ''}`;
+        }
+    }
+
+    // =====================================================================
+    //  Public API (for inline onclick handlers)
+    // =====================================================================
+    window.MatchPage = {
+        trackBet(market, selection, odds) {
+            const homeTeam = matchData?.home_team || matchData?.fixture?.home_team || '';
+            const awayTeam = matchData?.away_team || matchData?.fixture?.away_team || '';
+
+            fetch('/api/bets/track', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fixture_id: fixtureId,
+                    home_team: homeTeam,
+                    away_team: awayTeam,
+                    market: market,
+                    selection: selection,
+                    odds: odds
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    Components.showToast(data.error, 'error');
+                } else {
+                    Components.showToast('Bet tracked successfully!', 'success');
+                }
+            })
+            .catch(() => {
+                Components.showToast('Failed to track bet.', 'error');
+            });
+        }
     };
-    return map[outcome] || outcome || 'Unknown';
-}
+
+})();
 </script>
 {% endblock %}

@@ -2,79 +2,284 @@
 
 {% block title %}Fixtures - Premier League Betting Analysis{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/css/components.css">
+{% endblock %}
+
 {% block content %}
 <div class="fixtures-page">
     <header class="page-header">
         <h1>Upcoming Fixtures</h1>
-        <div class="filters">
-            <button class="btn btn-secondary active" hx-get="/api/fixtures?days=7" hx-target="#fixtures-container">Next 7 Days</button>
-            <button class="btn btn-secondary" hx-get="/api/fixtures?days=14" hx-target="#fixtures-container">Next 14 Days</button>
-            <button class="btn btn-secondary" hx-get="/api/fixtures?days=30" hx-target="#fixtures-container">Next 30 Days</button>
-        </div>
+        <p>Browse upcoming Premier League matches, view odds, and generate AI predictions.</p>
     </header>
 
-    <div id="fixtures-container" hx-get="/api/fixtures?days=7" hx-trigger="load" hx-swap="innerHTML">
-        <div class="loading">Loading fixtures...</div>
+    <!-- Filter Bar -->
+    <div class="filter-bar" id="days-filter">
+        <button class="btn active"
+                hx-get="/api/fixtures?days=7"
+                hx-target="#fixtures-container"
+                hx-swap="innerHTML"
+                onclick="Fixtures.setActiveFilter(this)">7 Days</button>
+        <button class="btn"
+                hx-get="/api/fixtures?days=14"
+                hx-target="#fixtures-container"
+                hx-swap="innerHTML"
+                onclick="Fixtures.setActiveFilter(this)">14 Days</button>
+        <button class="btn"
+                hx-get="/api/fixtures?days=30"
+                hx-target="#fixtures-container"
+                hx-swap="innerHTML"
+                onclick="Fixtures.setActiveFilter(this)">30 Days</button>
+        <button class="btn"
+                hx-get="/api/fixtures?days=365"
+                hx-target="#fixtures-container"
+                hx-swap="innerHTML"
+                onclick="Fixtures.setActiveFilter(this)">All</button>
+    </div>
+
+    <!-- Fixtures Container (loads on page load) -->
+    <div id="fixtures-container"
+         hx-get="/api/fixtures?days=7"
+         hx-trigger="load"
+         hx-swap="innerHTML"
+         style="margin-top: var(--space-lg);">
+        <!-- Skeleton loading state -->
+        <div class="fixtures-grid">
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+        </div>
+    </div>
+
+    <!-- Prediction modal overlay -->
+    <div class="modal-overlay" id="prediction-modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>AI Prediction</h2>
+                <button class="modal-close" onclick="Fixtures.closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="prediction-modal-body">
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text"></div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'fixtures-container') {
+const Fixtures = {
+
+    /**
+     * Switch the active pill in the filter bar.
+     */
+    setActiveFilter(btn) {
+        document.querySelectorAll('#days-filter .btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    },
+
+    /**
+     * Close the prediction modal.
+     */
+    closeModal() {
+        document.getElementById('prediction-modal-overlay').classList.remove('active');
+    },
+
+    /**
+     * Open the prediction modal and show content.
+     */
+    openModal(html) {
+        const body = document.getElementById('prediction-modal-body');
+        body.innerHTML = html;
+        document.getElementById('prediction-modal-overlay').classList.add('active');
+    },
+
+    /**
+     * Build the fixture cards grouped by date from API JSON.
+     */
+    renderFixtures(fixtures) {
+        if (!fixtures || fixtures.length === 0) {
+            return `
+                <div class="empty-state-component">
+                    <div class="empty-icon">&#9917;</div>
+                    <h3>No Fixtures Found</h3>
+                    <p>There are no upcoming fixtures in the selected time range. Try expanding the date filter.</p>
+                </div>`;
+        }
+
+        // Group by date
+        const grouped = {};
+        fixtures.forEach(f => {
+            const dateKey = f.match_date ? new Date(f.match_date).toLocaleDateString('en-GB', {
+                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+            }) : 'Date TBD';
+            if (!grouped[dateKey]) grouped[dateKey] = [];
+            grouped[dateKey].push(f);
+        });
+
+        return Object.entries(grouped).map(([dateLabel, matches]) => `
+            <div class="fixture-group" style="margin-bottom: var(--space-xl);">
+                <h6 style="margin-bottom: var(--space-md); padding-bottom: var(--space-xs); border-bottom: 1px solid var(--glass-border);">
+                    ${dateLabel}
+                </h6>
+                <div class="fixtures-grid">
+                    ${matches.map(f => Fixtures.renderFixtureCard(f)).join('')}
+                </div>
+            </div>
+        `).join('');
+    },
+
+    /**
+     * Build a single fixture card using the .fixture-card-v2 component.
+     */
+    renderFixtureCard(f) {
+        const matchTime = f.match_date
+            ? new Date(f.match_date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+            : 'TBD';
+
+        const homeForm = f.home_form || f.form_home || '';
+        const awayForm = f.away_form || f.form_away || '';
+
+        const formDotsHtml = (formStr) => {
+            if (!formStr) return '';
+            return `<div class="form-dots">` +
+                formStr.split('').slice(-5).map(r =>
+                    `<span class="form-dot ${r}"></span>`
+                ).join('') + `</div>`;
+        };
+
+        // Odds row
+        let oddsHtml = '';
+        if (f.odds) {
+            const o = f.odds;
+            oddsHtml = `
+                <div class="odds-row">
+                    <div class="odd">
+                        <span class="odd-label">Home</span>
+                        ${o.home_win != null ? o.home_win.toFixed(2) : '-'}
+                    </div>
+                    <div class="odd">
+                        <span class="odd-label">Draw</span>
+                        ${o.draw != null ? o.draw.toFixed(2) : '-'}
+                    </div>
+                    <div class="odd">
+                        <span class="odd-label">Away</span>
+                        ${o.away_win != null ? o.away_win.toFixed(2) : '-'}
+                    </div>
+                </div>`;
+        }
+
+        // Prediction badge
+        let predictionBadge = '';
+        if (f.prediction) {
+            const p = f.prediction;
+            const outcomeClass = p.predicted_outcome === 'home_win' ? 'home'
+                : p.predicted_outcome === 'away_win' ? 'away' : 'draw';
+            predictionBadge = `
+                <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-sm); padding-top: var(--space-sm);">
+                    <span class="prediction-outcome-badge ${outcomeClass}">
+                        ${Components.formatOutcome(p.predicted_outcome)}
+                    </span>
+                    <div class="gauge gauge-sm ${p.confidence >= 70 ? 'gauge-success' : p.confidence >= 50 ? 'gauge-warning' : 'gauge-danger'}"
+                         style="--gauge-value: ${p.confidence || 0}">
+                        <span class="gauge-label">${p.confidence || 0}%</span>
+                    </div>
+                </div>`;
+        }
+
+        const fixtureUrl = f.id ? `/match/${f.id}` : '#';
+
+        return `
+            <div class="fixture-card-v2">
+                <a href="${fixtureUrl}" style="text-decoration: none; color: inherit;">
+                    <div class="fixture-main">
+                        <div class="team-info">
+                            <span class="team-name">${f.home_team}</span>
+                            ${formDotsHtml(homeForm)}
+                        </div>
+                        <div class="fixture-center">
+                            <span class="fixture-time${f.status === 'live' ? ' live' : ''}">${matchTime}</span>
+                            ${f.score_home != null && f.score_away != null
+                                ? `<span class="fixture-score">${f.score_home} - ${f.score_away}</span>`
+                                : `<span class="fixture-score" style="font-size: 1rem; opacity: 0.4;">vs</span>`}
+                            ${f.venue ? `<span class="text-xs text-muted">${f.venue}</span>` : ''}
+                        </div>
+                        <div class="team-info">
+                            <span class="team-name">${f.away_team}</span>
+                            ${formDotsHtml(awayForm)}
+                        </div>
+                    </div>
+                </a>
+                ${oddsHtml}
+                ${predictionBadge}
+                <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-md); justify-content: center;">
+                    <button class="btn btn-primary btn-sm"
+                            hx-post="/api/predictions/match?home_team=${encodeURIComponent(f.home_team)}&away_team=${encodeURIComponent(f.away_team)}"
+                            hx-target="#prediction-modal-body"
+                            hx-swap="innerHTML"
+                            hx-indicator=".modal-body"
+                            onclick="document.getElementById('prediction-modal-overlay').classList.add('active')">
+                        Get Prediction
+                    </button>
+                    ${f.id ? `
+                    <a href="/match/${f.id}" class="btn btn-secondary btn-sm">
+                        Full Analysis
+                    </a>` : ''}
+                </div>
+            </div>`;
+    }
+};
+
+// -------------------------------------------------------------------------
+//  HTMX afterRequest handler - intercept JSON responses and render cards
+// -------------------------------------------------------------------------
+document.body.addEventListener('htmx:afterRequest', function(event) {
+    const target = event.detail.target;
+    const xhr = event.detail.xhr;
+
+    if (!xhr || !xhr.responseText) return;
+
+    // Fixtures container: parse JSON and render fixture cards
+    if (target && target.id === 'fixtures-container') {
         try {
-            const data = JSON.parse(event.detail.xhr.responseText);
-            if (data.fixtures) {
-                event.detail.target.innerHTML = formatFixturesPage(data.fixtures);
+            const data = JSON.parse(xhr.responseText);
+            const fixtures = data.fixtures || data;
+            target.innerHTML = Fixtures.renderFixtures(
+                Array.isArray(fixtures) ? fixtures : []
+            );
+        } catch (e) {
+            // Response was already HTML, leave as-is
+        }
+    }
+
+    // Prediction modal body: parse JSON and render prediction detail
+    if (target && target.id === 'prediction-modal-body') {
+        try {
+            const data = JSON.parse(xhr.responseText);
+            if (data.error) {
+                target.innerHTML = `<p class="text-danger">${data.error}</p>`;
+            } else {
+                target.innerHTML = Formatters.formatPredictionDetail(data);
             }
-        } catch (e) { }
+        } catch (e) {
+            // Response was already HTML, leave as-is
+        }
     }
 });
 
-function formatFixturesPage(fixtures) {
-    if (!fixtures || fixtures.length === 0) {
-        return '<p class="empty">No upcoming fixtures found</p>';
-    }
+// Close modal on overlay click
+document.getElementById('prediction-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) Fixtures.closeModal();
+});
 
-    // Group by date
-    const grouped = {};
-    fixtures.forEach(f => {
-        const date = f.match_date ? new Date(f.match_date).toDateString() : 'TBD';
-        if (!grouped[date]) grouped[date] = [];
-        grouped[date].push(f);
-    });
-
-    return Object.entries(grouped).map(([date, matches]) => `
-        <div class="fixture-group">
-            <h3 class="date-header">${date}</h3>
-            <div class="fixtures-grid">
-                ${matches.map(f => `
-                    <div class="fixture-card-large" hx-get="/match/${f.id || 0}" hx-target="#main-content" hx-push-url="true">
-                        <div class="fixture-teams">
-                            <div class="team home">
-                                <span class="team-name">${f.home_team}</span>
-                            </div>
-                            <div class="vs-container">
-                                <span class="vs">VS</span>
-                                <span class="time">${f.match_date ? new Date(f.match_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'TBD'}</span>
-                            </div>
-                            <div class="team away">
-                                <span class="team-name">${f.away_team}</span>
-                            </div>
-                        </div>
-                        <div class="fixture-info">
-                            <span class="venue">${f.venue || ''}</span>
-                            <span class="gameweek">Gameweek ${f.gameweek || '-'}</span>
-                        </div>
-                        <button class="btn btn-primary btn-small" hx-post="/api/predictions/match?home_team=${encodeURIComponent(f.home_team)}&away_team=${encodeURIComponent(f.away_team)}" hx-target="#prediction-modal" hx-swap="innerHTML">
-                            Get Prediction
-                        </button>
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
-}
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') Fixtures.closeModal();
+});
 </script>
 {% endblock %}

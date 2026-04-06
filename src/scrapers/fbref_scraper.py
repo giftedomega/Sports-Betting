@@ -246,6 +246,47 @@ class FBrefScraper(BaseScraper):
             logger.error(f"Failed to fetch player stats: {e}")
             return []
 
+    async def fetch_advanced_stats(self) -> List[Dict]:
+        """Fetch xG/xA/shooting stats from FBref."""
+        cached = self._get_cached("advanced_stats", CacheConfig.PLAYER_INFO)
+        if cached:
+            return cached
+
+        await self._rate_limit_wait()
+
+        try:
+            loop = asyncio.get_event_loop()
+            stats = await loop.run_in_executor(
+                None,
+                lambda: self.fbref.read_player_season_stats(stat_type="shooting")
+            )
+
+            players = []
+            for idx, row in stats.iterrows():
+                player_team = idx[0] if isinstance(idx, tuple) else None
+                player_name = idx[1] if isinstance(idx, tuple) and len(idx) > 1 else str(idx)
+
+                player = {
+                    "name": player_name,
+                    "team": player_team,
+                    "goals": int(row.get("Gls", 0) or 0),
+                    "shots": int(row.get("Sh", 0) or 0),
+                    "shots_on_target": int(row.get("SoT", 0) or 0),
+                    "xg": float(row.get("xG", 0) or 0),
+                    "npxg": float(row.get("npxG", 0) or 0),
+                    "xa": float(row.get("xAG", 0) or 0),
+                    "xg_per90": float(row.get("xG", 0) or 0) / max(float(row.get("90s", 1) or 1), 0.1),
+                }
+                players.append(player)
+
+            logger.info(f"Fetched xG stats for {len(players)} players")
+            self._set_cache("advanced_stats", players)
+            return players
+
+        except Exception as e:
+            logger.error(f"Failed to fetch advanced stats: {e}")
+            return []
+
     async def fetch_league_table(self) -> List[Dict]:
         """Fetch current league table."""
         return await self.fetch_team_stats()

@@ -1,167 +1,438 @@
 {% extends "base.html" %}
 
-{% block title %}Predictions - Premier League Betting Analysis{% endblock %}
+{% block title %}AI Predictions - Premier League Betting Analysis{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/components.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
 
 {% block content %}
 <div class="predictions-page">
-    <header class="page-header">
-        <h1>AI Predictions</h1>
-        <button class="btn btn-primary" hx-post="/api/predictions/analyze" hx-target="#predictions-container" hx-indicator="#analyze-loading">
-            <span id="analyze-loading" class="htmx-indicator">Analyzing...</span>
-            <span>Analyze All Upcoming Matches</span>
+
+    <!-- Page Header -->
+    <header class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1>AI Predictions</h1>
+            <p>Machine-learning match outcome forecasts with confidence scoring</p>
+        </div>
+        <button class="btn btn-primary"
+                hx-post="/api/predictions/analyze"
+                hx-target="#predictions-container"
+                hx-indicator="#analyze-spinner">
+            <span id="analyze-spinner" class="htmx-indicator">Analyzing...</span>
+            <span>Analyze All Upcoming</span>
         </button>
     </header>
 
-    <div class="predictions-stats" hx-get="/api/predictions/performance" hx-trigger="load" hx-swap="innerHTML">
-        <div class="loading">Loading stats...</div>
+    <!-- Stats Row -->
+    <div class="stats-grid" id="performance-stats"
+         hx-get="/api/predictions/performance"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="stat-card skeleton"><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+        <div class="stat-card skeleton"><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+        <div class="stat-card skeleton"><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+        <div class="stat-card skeleton"><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
     </div>
 
-    <div id="predictions-container" hx-get="/api/predictions" hx-trigger="load" hx-swap="innerHTML">
-        <div class="loading">Loading predictions...</div>
+    <!-- Charts Row -->
+    <div class="grid-2" style="margin-bottom: var(--space-xl);">
+        <div class="card">
+            <h2>Accuracy Over Time</h2>
+            <canvas id="accuracy-chart" height="220"></canvas>
+        </div>
+        <div class="card">
+            <h2>Profit/Loss Tracker</h2>
+            <canvas id="pnl-chart" height="220"></canvas>
+        </div>
     </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar" id="prediction-filters" style="margin-bottom: var(--space-lg);">
+        <span class="text-xs text-muted" style="padding: 0 var(--space-sm); white-space: nowrap;">FILTERS</span>
+
+        <button class="btn active" data-filter="confidence" data-value="all" onclick="applyFilter(this)">All Confidence</button>
+        <button class="btn" data-filter="confidence" data-value="high" onclick="applyFilter(this)">High</button>
+        <button class="btn" data-filter="confidence" data-value="medium" onclick="applyFilter(this)">Medium</button>
+        <button class="btn" data-filter="confidence" data-value="low" onclick="applyFilter(this)">Low</button>
+
+        <span style="width:1px; height:20px; background: var(--glass-border); flex-shrink:0;"></span>
+
+        <button class="btn active" data-filter="risk" data-value="all" onclick="applyFilter(this)">All Risk</button>
+        <button class="btn" data-filter="risk" data-value="low" onclick="applyFilter(this)">Low Risk</button>
+        <button class="btn" data-filter="risk" data-value="medium" onclick="applyFilter(this)">Med Risk</button>
+        <button class="btn" data-filter="risk" data-value="high" onclick="applyFilter(this)">High Risk</button>
+
+        <span style="width:1px; height:20px; background: var(--glass-border); flex-shrink:0;"></span>
+
+        <button class="btn active" data-filter="outcome" data-value="all" onclick="applyFilter(this)">All Outcomes</button>
+        <button class="btn" data-filter="outcome" data-value="correct" onclick="applyFilter(this)">Correct</button>
+        <button class="btn" data-filter="outcome" data-value="incorrect" onclick="applyFilter(this)">Incorrect</button>
+        <button class="btn" data-filter="outcome" data-value="pending" onclick="applyFilter(this)">Pending</button>
+    </div>
+
+    <!-- Predictions Grid -->
+    <div id="predictions-container"
+         hx-get="/api/predictions?limit=50"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="predictions-grid">
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+        </div>
+    </div>
+
 </div>
 
 <!-- Prediction Detail Modal -->
-<div id="prediction-modal" class="modal" style="display: none;">
-    <!-- Populated dynamically -->
+<div id="prediction-modal-overlay" class="modal-overlay" onclick="closePredictionModal(event)">
+    <div class="modal" id="prediction-modal">
+        <!-- Populated dynamically -->
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* -----------------------------------------------------------------------
+   State
+   ----------------------------------------------------------------------- */
+let allPredictions = [];
+let accuracyChart = null;
+let pnlChart = null;
+
+const activeFilters = { confidence: 'all', risk: 'all', outcome: 'all' };
+
+/* -----------------------------------------------------------------------
+   HTMX response handlers
+   ----------------------------------------------------------------------- */
 document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'predictions-container') {
+    const targetId = event.detail.target.id;
+
+    // Performance stats
+    if (targetId === 'performance-stats') {
         try {
             const data = JSON.parse(event.detail.xhr.responseText);
-            if (data.predictions) {
-                event.detail.target.innerHTML = formatPredictionsPage(data.predictions);
+            event.detail.target.innerHTML = formatPerformanceStats(data);
+        } catch (e) { /* server returned HTML fragment */ }
+    }
+
+    // Predictions container
+    if (targetId === 'predictions-container') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            const predictions = data.predictions || data;
+            if (Array.isArray(predictions)) {
+                allPredictions = predictions;
+                renderPredictions(predictions);
+                updateCharts(predictions);
             }
-        } catch (e) { }
-    }
-
-    if (event.detail.target.id === 'prediction-modal') {
-        try {
-            const data = JSON.parse(event.detail.xhr.responseText);
-            event.detail.target.innerHTML = formatPredictionDetail(data);
-            event.detail.target.style.display = 'block';
-        } catch (e) { }
-    }
-
-    if (event.detail.target.className.includes('predictions-stats')) {
-        try {
-            const data = JSON.parse(event.detail.xhr.responseText);
-            event.detail.target.innerHTML = formatPredictionStats(data);
-        } catch (e) { }
+        } catch (e) { /* server returned HTML fragment */ }
     }
 });
 
-function formatPredictionsPage(predictions) {
-    if (!predictions || predictions.length === 0) {
-        return `
-            <div class="empty-state">
-                <h3>No Predictions Yet</h3>
-                <p>Click "Analyze All Upcoming Matches" to generate AI predictions for upcoming fixtures.</p>
-            </div>
-        `;
-    }
+/* -----------------------------------------------------------------------
+   Performance stats
+   ----------------------------------------------------------------------- */
+function formatPerformanceStats(data) {
+    const profitLoss = data.total_profit_loss || 0;
+    const plClass = profitLoss >= 0 ? 'positive' : 'negative';
+    const plSign  = profitLoss >= 0 ? '+' : '';
 
     return `
-        <div class="predictions-grid">
-            ${predictions.map(p => `
-                <div class="prediction-card-large ${p.risk_level || 'medium'}">
-                    <div class="prediction-header">
-                        <span class="match">${p.home_team || 'Home'} vs ${p.away_team || 'Away'}</span>
-                        <span class="confidence-badge">${p.confidence || 0}%</span>
-                    </div>
-
-                    <div class="prediction-outcome">
-                        <span class="label">Predicted Outcome:</span>
-                        <span class="value ${p.predicted_outcome}">${formatOutcome(p.predicted_outcome)}</span>
-                    </div>
-
-                    ${p.predicted_score ? `
-                        <div class="predicted-score">
-                            <span>${p.predicted_score.home || 0}</span>
-                            <span>-</span>
-                            <span>${p.predicted_score.away || 0}</span>
-                        </div>
-                    ` : ''}
-
-                    <div class="key-factors">
-                        <h4>Key Factors</h4>
-                        <ul>
-                            ${(p.key_factors || []).map(f => `<li>${f}</li>`).join('')}
-                        </ul>
-                    </div>
-
-                    ${p.recommended_bets && p.recommended_bets.length > 0 ? `
-                        <div class="recommended-bets">
-                            <h4>Recommended Bets</h4>
-                            ${p.recommended_bets.map(b => `
-                                <div class="bet-item">
-                                    <span class="market">${b.market}</span>
-                                    <span class="selection">${b.selection}</span>
-                                    <span class="bet-confidence">${b.confidence}%</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : ''}
-
-                    <div class="risk-indicator ${p.risk_level || 'medium'}">
-                        Risk: ${(p.risk_level || 'medium').toUpperCase()}
-                    </div>
-
-                    <div class="summary">${p.summary || ''}</div>
-                </div>
-            `).join('')}
+        <div class="stat-card">
+            <span class="stat-value">${data.total_predictions || 0}</span>
+            <span class="stat-label">Total Predictions</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">${data.correct_predictions || 0}</span>
+            <span class="stat-label">Correct</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">${(data.accuracy || 0).toFixed(1)}%</span>
+            <span class="stat-label">Accuracy</span>
+        </div>
+        <div class="stat-card ${plClass}">
+            <span class="stat-value">${plSign}${profitLoss.toFixed(2)}</span>
+            <span class="stat-label">Profit / Loss</span>
         </div>
     `;
 }
 
+/* -----------------------------------------------------------------------
+   Render prediction cards
+   ----------------------------------------------------------------------- */
+function renderPredictions(predictions) {
+    const container = document.getElementById('predictions-container');
+
+    if (!predictions || predictions.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state-component">
+                <div class="empty-icon">&#9917;</div>
+                <h3>No Predictions Yet</h3>
+                <p>Click "Analyze All Upcoming" to generate AI predictions for upcoming fixtures.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="predictions-grid">
+            ${predictions.map(p => buildPredictionCard(p)).join('')}
+        </div>
+    `;
+}
+
+function buildPredictionCard(p) {
+    const outcome     = p.predicted_outcome || 'unknown';
+    const confidence  = p.confidence || 0;
+    const risk        = (p.risk_level || 'medium').toLowerCase();
+    const resultClass = getResultBorderClass(p);
+    const confLevel   = confidence >= 70 ? 'high' : confidence >= 40 ? 'medium' : 'low';
+
+    const gaugeColor = confidence >= 70
+        ? 'gauge-success'
+        : confidence >= 40 ? 'gauge-warning' : 'gauge-danger';
+
+    return `
+        <div class="prediction-card-v2 risk-${risk} ${resultClass}"
+             data-confidence="${confLevel}"
+             data-risk="${risk}"
+             data-outcome="${getOutcomeStatus(p)}">
+
+            <!-- Top: match + outcome badge -->
+            <div class="prediction-top">
+                <div>
+                    <h4 style="margin-bottom: var(--space-xs);">
+                        ${p.home_team || 'Home'} vs ${p.away_team || 'Away'}
+                    </h4>
+                    ${p.match_date ? `<span class="text-xs text-muted">${new Date(p.match_date).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })}</span>` : ''}
+                </div>
+                <span class="prediction-outcome-badge ${outcomeBadgeClass(outcome)}">
+                    ${formatOutcome(outcome)}
+                </span>
+            </div>
+
+            <!-- Confidence gauge -->
+            <div class="prediction-confidence">
+                <div class="gauge gauge-sm ${gaugeColor}" style="--gauge-value: ${confidence};">
+                    <span class="gauge-label">${confidence}%</span>
+                </div>
+                <div>
+                    <span class="text-sm" style="font-weight:600;">Confidence</span><br>
+                    <span class="pill pill-${confLevel === 'high' ? 'success' : confLevel === 'medium' ? 'warning' : 'danger'}">${confLevel.toUpperCase()}</span>
+                </div>
+            </div>
+
+            <!-- Risk badge -->
+            <div style="margin-bottom: var(--space-md);">
+                <span class="pill pill-${risk === 'low' ? 'success' : risk === 'medium' ? 'warning' : 'danger'}">
+                    Risk: ${risk.toUpperCase()}
+                </span>
+            </div>
+
+            <!-- Key Factors -->
+            ${(p.key_factors && p.key_factors.length) ? `
+                <div style="margin-bottom: var(--space-md);">
+                    <h6>Key Factors</h6>
+                    <ul style="list-style: disc; padding-left: 1.2rem; margin-top: var(--space-xs);">
+                        ${p.key_factors.map(f => `<li class="text-sm text-muted">${f}</li>`).join('')}
+                    </ul>
+                </div>
+            ` : ''}
+
+            <!-- Recommended Bets -->
+            ${(p.recommended_bets && p.recommended_bets.length) ? `
+                <div style="margin-bottom: var(--space-md);">
+                    <h6>Recommended Bets</h6>
+                    <div style="display:flex; flex-direction:column; gap:var(--space-xs); margin-top:var(--space-xs);">
+                        ${p.recommended_bets.map(b => `
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding:var(--space-xs) var(--space-sm); background:rgba(255,255,255,0.03); border-radius:var(--border-radius-sm);">
+                                <span class="text-sm">${b.market || ''}</span>
+                                <span class="text-sm" style="font-weight:600;">${b.selection || ''}</span>
+                                <span class="pill pill-info">${b.confidence || 0}%</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Summary -->
+            ${p.summary ? `<p class="prediction-summary">${p.summary}</p>` : ''}
+        </div>
+    `;
+}
+
+/* -----------------------------------------------------------------------
+   Helpers
+   ----------------------------------------------------------------------- */
 function formatOutcome(outcome) {
-    const map = {
-        'home_win': 'Home Win',
-        'away_win': 'Away Win',
-        'draw': 'Draw'
-    };
+    const map = { home_win: 'Home Win', away_win: 'Away Win', draw: 'Draw' };
     return map[outcome] || outcome || 'Unknown';
 }
 
-function formatPredictionStats(data) {
-    return `
-        <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-value">${data.total_predictions || 0}</span>
-                <span class="stat-label">Total Predictions</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value">${data.correct_predictions || 0}</span>
-                <span class="stat-label">Correct</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value">${(data.accuracy || 0).toFixed(1)}%</span>
-                <span class="stat-label">Accuracy</span>
-            </div>
-            <div class="stat-card ${data.total_profit_loss >= 0 ? 'positive' : 'negative'}">
-                <span class="stat-value">${data.total_profit_loss >= 0 ? '+' : ''}${(data.total_profit_loss || 0).toFixed(2)}</span>
-                <span class="stat-label">Profit/Loss</span>
-            </div>
-        </div>
-    `;
+function outcomeBadgeClass(outcome) {
+    if (outcome === 'home_win') return 'home';
+    if (outcome === 'away_win') return 'away';
+    if (outcome === 'draw') return 'draw';
+    return '';
 }
 
-function formatPredictionDetail(data) {
-    return `
-        <div class="modal-content">
-            <button class="modal-close" onclick="this.parentElement.parentElement.style.display='none'">&times;</button>
-            <h2>${data.home_team} vs ${data.away_team}</h2>
-            <div class="prediction-detail">
-                <p><strong>Outcome:</strong> ${formatOutcome(data.predicted_outcome)}</p>
-                <p><strong>Confidence:</strong> ${data.confidence}%</p>
-                <p><strong>Summary:</strong> ${data.summary || 'No summary available'}</p>
-            </div>
-        </div>
-    `;
+function getResultBorderClass(p) {
+    if (p.result === 'correct')   return 'result-correct';
+    if (p.result === 'incorrect') return 'result-incorrect';
+    return '';
 }
+
+function getOutcomeStatus(p) {
+    if (p.result === 'correct')   return 'correct';
+    if (p.result === 'incorrect') return 'incorrect';
+    return 'pending';
+}
+
+/* -----------------------------------------------------------------------
+   Filters
+   ----------------------------------------------------------------------- */
+function applyFilter(btn) {
+    const group = btn.getAttribute('data-filter');
+    const value = btn.getAttribute('data-value');
+    activeFilters[group] = value;
+
+    // Toggle active class within the same filter group
+    document.querySelectorAll(`#prediction-filters .btn[data-filter="${group}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    filterPredictions();
+}
+
+function filterPredictions() {
+    const cards = document.querySelectorAll('#predictions-container .prediction-card-v2');
+    cards.forEach(card => {
+        const conf    = card.getAttribute('data-confidence');
+        const risk    = card.getAttribute('data-risk');
+        const outcome = card.getAttribute('data-outcome');
+
+        const showConf    = activeFilters.confidence === 'all' || conf === activeFilters.confidence;
+        const showRisk    = activeFilters.risk === 'all'       || risk === activeFilters.risk;
+        const showOutcome = activeFilters.outcome === 'all'    || outcome === activeFilters.outcome;
+
+        card.style.display = (showConf && showRisk && showOutcome) ? '' : 'none';
+    });
+}
+
+/* -----------------------------------------------------------------------
+   Charts
+   ----------------------------------------------------------------------- */
+const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: { display: false },
+        tooltip: {
+            backgroundColor: 'rgba(22, 33, 62, 0.95)',
+            borderColor: 'rgba(255, 255, 255, 0.08)',
+            borderWidth: 1,
+            titleColor: '#fff',
+            bodyColor: '#8892b0',
+            padding: 10,
+            cornerRadius: 8
+        }
+    },
+    scales: {
+        x: {
+            grid:  { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#8892b0', font: { size: 11 } }
+        },
+        y: {
+            grid:  { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#8892b0', font: { size: 11 } }
+        }
+    }
+};
+
+function initCharts() {
+    const acCtx = document.getElementById('accuracy-chart');
+    const plCtx = document.getElementById('pnl-chart');
+    if (!acCtx || !plCtx) return;
+
+    accuracyChart = new Chart(acCtx.getContext('2d'), {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Accuracy %', data: [], borderColor: '#00ff85', backgroundColor: 'rgba(0,255,133,0.08)', fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: '#00ff85' }] },
+        options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, min: 0, max: 100 } } }
+    });
+
+    pnlChart = new Chart(plCtx.getContext('2d'), {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Cumulative P/L', data: [], borderColor: '#e90052', backgroundColor: 'rgba(233,0,82,0.08)', fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: '#e90052' }] },
+        options: chartDefaults
+    });
+}
+
+function updateCharts(predictions) {
+    if (!accuracyChart || !pnlChart) return;
+
+    // Sort chronologically
+    const sorted = [...predictions]
+        .filter(p => p.match_date)
+        .sort((a, b) => new Date(a.match_date) - new Date(b.match_date));
+
+    if (sorted.length === 0) return;
+
+    const labels        = [];
+    const accData       = [];
+    const plData        = [];
+    let correctCount    = 0;
+    let totalResolved   = 0;
+    let cumulativePL    = 0;
+
+    sorted.forEach(p => {
+        const dateLabel = new Date(p.match_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        labels.push(dateLabel);
+
+        if (p.result === 'correct')   { correctCount++; totalResolved++; }
+        if (p.result === 'incorrect') { totalResolved++; }
+
+        const acc = totalResolved > 0 ? ((correctCount / totalResolved) * 100) : 0;
+        accData.push(parseFloat(acc.toFixed(1)));
+
+        cumulativePL += (p.profit_loss || 0);
+        plData.push(parseFloat(cumulativePL.toFixed(2)));
+    });
+
+    accuracyChart.data.labels              = labels;
+    accuracyChart.data.datasets[0].data    = accData;
+    accuracyChart.update();
+
+    pnlChart.data.labels                   = labels;
+    pnlChart.data.datasets[0].data         = plData;
+    pnlChart.update();
+}
+
+/* -----------------------------------------------------------------------
+   Modal helpers
+   ----------------------------------------------------------------------- */
+function closePredictionModal(event) {
+    if (event.target.id === 'prediction-modal-overlay') {
+        document.getElementById('prediction-modal-overlay').classList.remove('active');
+    }
+}
+
+/* -----------------------------------------------------------------------
+   Init
+   ----------------------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', initCharts);
+
+/* Style overrides for result borders */
+const style = document.createElement('style');
+style.textContent = `
+    .prediction-card-v2.result-correct  { border-color: var(--success); }
+    .prediction-card-v2.result-incorrect { border-color: var(--danger); }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}
