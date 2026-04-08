@@ -1,7 +1,7 @@
 # AI Football Betting Analysis Configuration
 
 llm:
-  model: "gemma3:12b"
+  model: "gemma4:e4b"
   ollama_host: "http://localhost:11434"
   max_concurrent: 2
   temperature: 0.3
@@ -63,11 +63,11 @@ news:
     - name: "ESPN FC"
       url: "https://www.espn.com/espn/rss/soccer/news"
     - name: "Mirror Football"
-      url: "https://www.mirror.co.uk/sport/football/rss.xml"
-    - name: "TeamTalk"
-      url: "https://www.teamtalk.com/feed"
-    - name: "Football365"
-      url: "https://www.football365.com/feed"
+      url: "https://www.mirror.co.uk/sport/football/?service=rss"
+    - name: "Football London"
+      url: "https://www.football.london/rss.xml"
+    - name: "The Athletic"
+      url: "https://www.nytimes.com/athletic/rss/football/"
   update_interval: 900
   cache_ttl: 600
 

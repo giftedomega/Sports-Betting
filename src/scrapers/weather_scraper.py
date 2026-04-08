@@ -23,16 +23,35 @@ STADIUM_COORDS = {
     "Everton": (53.4388, -2.9663),             # Goodison Park
     "Fulham": (51.4750, -0.2217),              # Craven Cottage
     "Ipswich": (52.0545, 1.1446),              # Portman Road
+    "Ipswich Town": (52.0545, 1.1446),         # Portman Road
     "Leicester": (52.6204, -1.1422),           # King Power Stadium
+    "Leicester City": (52.6204, -1.1422),      # King Power Stadium
     "Liverpool": (53.4308, -2.9608),           # Anfield
     "Manchester City": (53.4831, -2.2004),     # Etihad Stadium
     "Manchester United": (53.4631, -2.2913),   # Old Trafford
+    "Manchester Utd": (53.4631, -2.2913),      # Old Trafford (variant)
+    "Man United": (53.4631, -2.2913),          # Old Trafford (variant)
     "Newcastle": (54.9756, -1.6217),           # St James' Park
+    "Newcastle United": (54.9756, -1.6217),    # St James' Park
     "Nottingham Forest": (52.9400, -1.1325),   # City Ground
+    "Nott'ham Forest": (52.9400, -1.1325),     # City Ground (variant)
     "Southampton": (50.9058, -1.3910),         # St Mary's Stadium
     "Tottenham": (51.6042, -0.0662),           # Tottenham Hotspur Stadium
+    "Tottenham Hotspur": (51.6042, -0.0662),   # Tottenham Hotspur Stadium
+    "Spurs": (51.6042, -0.0662),               # Tottenham Hotspur Stadium
     "West Ham": (51.5387, 0.0166),             # London Stadium
+    "West Ham United": (51.5387, 0.0166),      # London Stadium
     "Wolves": (52.5901, -2.1306),              # Molineux Stadium
+    "Wolverhampton": (52.5901, -2.1306),       # Molineux Stadium
+    # Promoted/other teams that may appear
+    "Burnley": (53.7890, -2.2302),             # Turf Moor
+    "Sunderland": (54.9146, -1.3882),          # Stadium of Light
+    "Leeds": (53.7779, -1.5721),               # Elland Road
+    "Leeds United": (53.7779, -1.5721),        # Elland Road
+    "Sheffield United": (53.3706, -1.4710),    # Bramall Lane
+    "Luton": (51.8843, -0.4316),              # Kenilworth Road
+    "Luton Town": (51.8843, -0.4316),         # Kenilworth Road
+    "Middlesbrough": (54.5783, -1.2170),       # Riverside Stadium
 }
 
 

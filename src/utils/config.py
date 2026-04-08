@@ -23,7 +23,7 @@ def get_config_base_dir() -> Path:
 
 class LLMConfig(BaseModel):
     """LLM configuration."""
-    model: str = "gemma3:12b"
+    model: str = "gemma4:e4b"
     ollama_host: str = "http://localhost:11434"
     max_concurrent: int = 2
     temperature: float = 0.3

@@ -40,7 +40,7 @@ class NewsScraper(BaseScraper):
     def http_client(self) -> httpx.AsyncClient:
         """Get HTTP client."""
         if self._http_client is None:
-            self._http_client = httpx.AsyncClient(timeout=30.0)
+            self._http_client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
         return self._http_client
 
     def _extract_teams_mentioned(self, text: str) -> List[str]:
